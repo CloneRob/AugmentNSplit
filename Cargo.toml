@@ -1,0 +1,6 @@
+[package]
+name = "AugmentNSplit"
+version = "0.1.0"
+authors = ["CloneRob <ropamen@gmail.com>"]
+
+[dependencies]
