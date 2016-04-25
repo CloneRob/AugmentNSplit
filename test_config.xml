@@ -1,0 +1,17 @@
+<img_dir>...</img_dir>
+<label>
+  <label_type>IMG | csv</label_type>
+  <label_dir></label_dir>
+</label>
+
+<split>
+  <height>224</height>
+  <width>224</width>
+  <offset>20</offset>
+  <rotation>Random || Deg</rotation>
+  <batches>250</batches>
+</split>
+<augment>
+  <vector_field>
+  </vector_field>
+</augment>
