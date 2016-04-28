@@ -4,6 +4,7 @@ extern crate image;
 
 mod ans;
 mod img_buffer;
+mod img_reader;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -18,5 +19,5 @@ fn main() {
     } else {
         panic!("Could not open img/path");
     }
-
+    let path = Path::new("/home/robert/Projects/ba/images");
 }

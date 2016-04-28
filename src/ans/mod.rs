@@ -26,6 +26,6 @@ pub struct Ans<'a> {
 
 impl<'a> Ans<'a> {
     pub fn new(config_path: &Path) -> Option<Ans> {
-        None
+        unimplemented!()
     }
 }
