@@ -1,9 +1,9 @@
 
 #![allow(dead_code)]
 extern crate image;
+extern crate xml;
 
 mod ans;
-mod img_buffer;
 mod img_reader;
 
 //use std::fs::File;

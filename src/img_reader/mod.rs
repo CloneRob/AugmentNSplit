@@ -16,8 +16,8 @@ pub struct ImgReader {
 }
 
 impl ImgReader {
-    pub fn new<'a, 'b: 'a>(img_path: &'a Path, label_type: LabelType<'a>) -> ImgReader {
 
+    pub fn new<'a, 'b: 'a>(img_path: &'a Path, label_type: LabelType<'a>) -> ImgReader {
         let training_map = image_map(img_path);
 
         let label_map: HashMap<OsString, image::DynamicImage> = match label_type {
