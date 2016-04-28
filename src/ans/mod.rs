@@ -1,12 +1,7 @@
 
 use std::path::Path;
 use img_buffer;
-
-enum LabelType<'a> {
-    Img(&'a Path),
-    FileName,
-    CSV(&'a Path),
-}
+use img_reader::LabelType;
 
 enum SplitOffset {
     Random,
@@ -17,11 +12,11 @@ pub struct Ans<'a> {
     label_type: LabelType<'a>,
 
     split_size: Option<(u16, u16)>,
-    //offset for x and y values
+    // offset for x and y values
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
 
-    //None for batches meaning single files for each split image
-    batches: Option<u16>
+    // None for batches meaning single files for each split image
+    batches: Option<u16>,
 }
 
 impl<'a> Ans<'a> {

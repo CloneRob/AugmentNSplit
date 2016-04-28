@@ -6,18 +6,19 @@ mod ans;
 mod img_buffer;
 mod img_reader;
 
-use std::io::prelude::*;
-use std::fs::File;
+//use std::fs::File;
 use std::path::Path;
 
-fn main() {
-    let mut file = File::create("batch.bin").unwrap();
-    let test_img = image::open(&Path::new("pat01_im1_NDBT.tif"));
+use img_reader::{ImgReader, LabelType};
 
-    if let Ok(img) = test_img {
-        file.write_all(&img.raw_pixels()[..]).unwrap();
-    } else {
-        panic!("Could not open img/path");
-    }
-    let path = Path::new("/home/robert/Projects/ba/images");
+fn main() {
+    //let mut file = File::create("batch.bin").unwrap();
+    //let test_img = image::open(&Path::new("pat01_im1_NDBT.tif"));
+
+    let training_path = Path::new("/home/robert/Projects/ba/images");
+
+    let label_path = Path::new("/home/robert/Projects/ba/mask_diff");
+    let label_type = LabelType::Img(label_path);
+
+    let img_reader = ImgReader::new(training_path, label_type);
 }
