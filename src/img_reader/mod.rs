@@ -1,13 +1,14 @@
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::ffi::OsString;
 use std::collections::HashMap;
 use image;
 
-pub enum LabelType<'a> {
-    Img(&'a Path),
+pub enum LabelType {
+    Img(PathBuf),
     FileName,
-    CSV(&'a Path),
+    CSV(PathBuf),
 }
 
 pub struct ImgReader {
@@ -16,10 +17,8 @@ pub struct ImgReader {
 }
 
 impl ImgReader {
-
-    pub fn new<'a, 'b: 'a>(img_path: &'a Path, label_type: LabelType<'a>) -> ImgReader {
+    pub fn new<'a, 'b: 'a>(img_path: PathBuf, label_type: LabelType) -> ImgReader {
         let training_map = image_map(img_path);
-
         let label_map: HashMap<OsString, image::DynamicImage> = match label_type {
             // TODO Currently this only works for labels in the form of an image, which is my current
             // use case. Support for the other fields in the LabelType will be added later
@@ -52,7 +51,7 @@ impl ImgReader {
     }
 }
 
-fn image_map<'a>(img_path: &'a Path) -> HashMap<OsString, image::DynamicImage> {
+fn image_map<'a>(img_path: PathBuf) -> HashMap<OsString, image::DynamicImage> {
     let dir_entries = fs::read_dir(img_path)
                           .expect("The specified path given to fn image_map() doesn't seem to \
                                    exist");

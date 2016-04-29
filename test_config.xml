@@ -1,14 +1,18 @@
-<img_dir>...</img_dir>
+<img_dir>/home/robert/Projects/ba/images/</img_dir>
+
 <label>
-  <label_type>IMG | csv</label_type>
-  <label_dir></label_dir>
+  <label_type>IMG</label_type>
+  <label_dir>/home/robert/Projects/ba/mask_diff/</label_dir>
 </label>
 
 <split>
   <height>224</height>
   <width>224</width>
-  <offset>20</offset>
-  <rotation>Random || Deg</rotation>
+  <offset>
+    <x>20</x>
+    <y>20</y>
+  </offset>
+  <rotation>None</rotation>
   <batches>250</batches>
 </split>
 <augment>
