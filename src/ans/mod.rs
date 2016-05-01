@@ -4,10 +4,12 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::path::PathBuf;
+use std::collections::HashMap;
 
 use xml::reader::{EventReader, XmlEvent, Error};
 
 use img_reader::LabelType;
+use image::*;
 
 enum SplitOffset {
     Random,
@@ -48,6 +50,30 @@ pub struct Ans<'a> {
 }
 
 impl<'a> Ans<'a> {
+    pub fn check_color(image: &RgbImage, color: [u8; 3], percentage: f32) -> bool {
+        let dim = {
+            let (x, y) = image.dimensions();
+            (x as f32, y as f32)
+        };
+        if let Some(majority_color) = Ans::majority_color(image) {
+            if majority_color.0 == color && (majority_color.1 as f32 / dim.0 * dim.1) >= percentage {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+    pub fn majority_color(image: &RgbImage) -> Option<([u8;3], usize)> {
+        let mut color_map: HashMap<[u8;3], usize> = HashMap::new();
+        for pixel in image.pixels() {
+            let color_cnt = color_map.entry(pixel.data).or_insert(0);
+            *color_cnt += 1;
+        }
+        let majority_color = color_map.drain().max();
+        majority_color
+    }
     fn set_split_size(&mut self, x: u16, y: u16) {
         self.split_size = Some((x, y));
     }
