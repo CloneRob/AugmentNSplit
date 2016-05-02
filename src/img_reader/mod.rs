@@ -5,6 +5,7 @@ use std::ffi::OsString;
 use std::collections::HashMap;
 use image;
 
+#[derive(Clone)]
 pub enum LabelType {
     Img(PathBuf),
     FileName,
