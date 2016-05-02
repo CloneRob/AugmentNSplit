@@ -30,38 +30,11 @@ fn main() {
 
     let label_type = LabelType::Img(label_path);
 
-    let mut ans = AnsPathBuilder::new().set_img_dir(training_path).set_label_type(label_type).set_split_size(Some((224u32, 224u32))).set_split_offset((Some(SplitOffset::Val(50u32)), Some(SplitOffset::Val(50u32)))).build();
+    let mut ans = AnsPathBuilder::new().set_img_dir(training_path).set_label_type(label_type).set_split_size(Some((224u32, 224u32))).set_split_offset((Some(SplitOffset::Val(50u32)), Some(SplitOffset::Val(50u32)))).set_batches(250).build();
 
 
     let splitimage_vec  = ans.fill_split_vec();
     println!("{:?} Images in splitvec", splitimage_vec.len());
+    ans.convert_vec_to_binary(splitimage_vec);
 
-}
-
-
-pub enum Label {
-    Sick,
-    Healthy,
-}
-
-pub struct SplitImage {
-    source: OsString,
-    image: RgbImage,
-    label: Label,
-    dimension: (u32, u32),
-    x_offset: u32,
-    y_offset: u32,
-}
-
-impl SplitImage {
-    pub fn new(src: OsString, img: RgbImage, label: Label, dim: (u32, u32), x: u32, y: u32) -> SplitImage {
-        SplitImage {
-            source: src,
-            image: img,
-            label: label,
-            dimension: dim,
-            x_offset: x,
-            y_offset: y,
-        }
-    }
 }

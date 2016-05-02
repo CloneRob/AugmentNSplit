@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::prelude::*;
 use std::ffi::OsString;
 use std::io::BufReader;
 use std::path::Path;
@@ -28,6 +29,68 @@ pub struct Ans {
 }
 
 impl<'a> Ans {
+    fn write_to_file(&self, img_buffer: &Vec<u8>, batch_cnt: usize) {
+        let path = self.img_dir.clone();
+        let mut batch_path = path.parent().unwrap().to_path_buf();
+        batch_path.push(Path::new(&("training_data/data_batch_".to_string() +
+                                    &*batch_cnt.to_string() +
+                                    ".bin")[..]));
+
+        let mut file = File::create(batch_path).unwrap();
+        file.write_all(&img_buffer[..]);
+    }
+
+    pub fn convert_vec_to_binary(&self, split_vec: Vec<SplitImage>) {
+        let split_size = self.get_split_size();
+        let buffer_length = (split_size.0 * split_size.1)  as usize;
+        let batch_size = if let Some(bs) = self.batches {
+            bs
+        } else {
+            1
+        };
+        let mut img_cnt = 0usize;
+        let mut batch_cnt = 0usize;
+
+        let mut red_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
+        let mut green_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
+        let mut blue_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
+
+        let mut img_buffer: Vec<u8> = Vec::with_capacity(batch_size * (buffer_length * 3 + 1));
+        
+        for img in split_vec {
+            for pixel in img.image.pixels() {
+                // pixel.data contains values for red, green and blue channel
+                // of the pixel
+                red_buffer.push(pixel.data[0]);
+                green_buffer.push(pixel.data[1]);
+                blue_buffer.push(pixel.data[2]);
+            }
+
+            if img_cnt < batch_size {
+
+                match img.label {
+                    Label::Healthy => img_buffer.push(0),
+                    Label::Sick => img_buffer.push(1),
+                }
+
+                img_buffer.append(&mut red_buffer);
+                img_buffer.append(&mut green_buffer);
+                img_buffer.append(&mut blue_buffer);
+                img_cnt += 1;
+            } else {
+                self.write_to_file(&img_buffer, batch_cnt);
+                img_buffer.clear();
+                batch_cnt += 1;
+                img_cnt = 0;
+            }
+
+
+            red_buffer.clear();
+            green_buffer.clear();
+            blue_buffer.clear();
+
+        }
+    }
     pub fn fill_split_vec(&mut self) -> Vec<SplitImage> {
 
         let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
@@ -46,7 +109,7 @@ impl<'a> Ans {
                     let (x_dim, y_dim) = img_tuple.0.dimensions();
                     let (mut x_current, mut y_current) = (0u32, 0u32);
 
-                    while x_current <= x_dim && y_current <= y_dim {
+                    while x_current <= x_dim - x_len && y_current <= y_dim - y_len {
                         if let Some(split_img) = Ans::split_image(&name,
                                                                   img_tuple,
                                                                   x_current,
@@ -91,6 +154,10 @@ impl<'a> Ans {
                    -> Option<SplitImage> {
         let split_img = imageops::crop(&mut img_tuple.0, x_current, y_current, x_len, y_len)
                             .to_image();
+        let (x_dim, y_dim) = split_img.dimensions();
+        if x_dim < x_len || y_dim < y_len {
+            println!("{} {}", x_dim, y_dim);
+        }
         if !Ans::check_color(&split_img, [0, 0, 0], set_percentage) {
 
             let split_label = imageops::crop(&mut img_tuple.1, x_current, y_current, x_len, y_len)
@@ -115,6 +182,7 @@ impl<'a> Ans {
         };
         if let Some(majority_color) = Ans::majority_color(image) {
             if majority_color.0 == color &&
+                //percentage of color in given image
                (majority_color.1 as f32 / dim.0 * dim.1) >= percentage {
                 true
             } else {
@@ -135,6 +203,13 @@ impl<'a> Ans {
     }
     fn set_split_size(&mut self, x: u32, y: u32) {
         self.split_size = Some((x, y));
+    }
+    fn get_split_size(&self) -> (u32, u32) {
+        if let Some((x, y)) = self.split_size {
+            (x, y)
+        } else {
+            (0, 0)
+        }
     }
     fn set_split_offset(&mut self, x: Option<u32>, y: Option<u32>) {
         match (x, y) {
@@ -158,7 +233,7 @@ impl<'a> Ans {
         while let Ok(xml_event) = xml_events.next() {
             match xml_event {
                 XmlEvent::CData(s) => {
-                    //path_builder.set_img_dir(PathBuf::from(s));
+                    // path_builder.set_img_dir(PathBuf::from(s));
                 }
                 XmlEvent::EndElement { name } => {
                     if name.local_name == "img_dir" {
@@ -255,7 +330,7 @@ impl AnsPathBuilder {
             batches: None,
         }
     }
-    pub fn set_img_dir(mut self, path: PathBuf) -> AnsPathBuilder{
+    pub fn set_img_dir(mut self, path: PathBuf) -> AnsPathBuilder {
         self.img_dir = Some(path);
         self
     }
@@ -264,13 +339,24 @@ impl AnsPathBuilder {
         self.label_type = Some(label_type);
         self
     }
-    pub fn set_split_size(mut self, size: Option<(u32, u32)>) -> AnsPathBuilder{
+    pub fn set_split_size(mut self, size: Option<(u32, u32)>) -> AnsPathBuilder {
         self.split_size = size;
         self
     }
 
-    pub fn set_split_offset(mut self, offset: (Option<SplitOffset>, Option<SplitOffset>)) -> AnsPathBuilder{
+    pub fn set_split_offset(mut self,
+                            mut offset: (Option<SplitOffset>, Option<SplitOffset>))
+                            -> AnsPathBuilder {
+        if let (Some(so1), Some(so2)) = offset.clone() {
+            if so1.get_value() == 0 || so2.get_value() == 0 {
+                offset = (None, None);
+            }
+        }
         self.split_offset = offset;
+        self
+    }
+    pub fn set_batches(mut self, batches: usize) -> AnsPathBuilder {
+        self.batches = Some(batches);
         self
     }
 
@@ -281,7 +367,7 @@ impl AnsPathBuilder {
                             .expect("Called AnsPathBuilder.build() without setting label_type"),
             split_size: self.split_size,
             split_offset: self.split_offset,
-            batches: None,
+            batches: self.batches,
             discard_barrier: None,
         }
     }
