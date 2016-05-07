@@ -56,7 +56,7 @@ impl<'a> Ans {
         let mut blue_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
 
         let mut img_buffer: Vec<u8> = Vec::with_capacity(batch_size * (buffer_length * 3 + 1));
-        
+
         for img in split_vec {
             for pixel in img.image.pixels() {
                 // pixel.data contains values for red, green and blue channel
@@ -107,20 +107,23 @@ impl<'a> Ans {
 
                 for (name, img_tuple) in img_reader.img_map.iter_mut() {
                     let (x_dim, y_dim) = img_tuple.0.dimensions();
-                    let (mut x_current, mut y_current) = (0u32, 0u32);
 
-                    while x_current <= x_dim - x_len && y_current <= y_dim - y_len {
-                        if let Some(split_img) = Ans::split_image(&name,
-                                                                  img_tuple,
-                                                                  x_current,
-                                                                  y_current,
-                                                                  x_len,
-                                                                  y_len,
-                                                                  set_percentage) {
-                            splitimage_vec.push(split_img);
+
+                    let mut y_current = 0u32;
+                    while y_current <= y_dim - y_len {
+                        let mut x_current = 0u32;
+                        while x_current <= x_dim - x_len {
+                            if let Some(split_img) = Ans::split_image(&name,
+                                                                      img_tuple,
+                                                                      x_current,
+                                                                      y_current,
+                                                                      x_len,
+                                                                      y_len,
+                                                                      set_percentage) {
+                                splitimage_vec.push(split_img);
+                            }
+                            x_current += x_offset;
                         }
-
-                        x_current += x_offset;
                         y_current += y_offset;
                     }
                 }

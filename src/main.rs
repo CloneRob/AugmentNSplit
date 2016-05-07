@@ -22,15 +22,15 @@ fn main() {
 
     //let config_path = PathBuf::from("/home/robert/Projects/rust/AugmentNSplit/test_config.xml");
 
-    //let training_path = PathBuf::from("/media/robert/2E722FCC722F979B/Bachelor Arbeit/BIlder");
-    //let label_path = PathBuf::from("/media/robert/2E722FCC722F979B/Bachelor Arbeit/mask_and");
+    let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/image_subset");
+    let label_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/mask_subset");
 
-    let training_path = PathBuf::from("/home/robert/Projects/ba/images");
-    let label_path = PathBuf::from("/home/robert/Projects/ba/mask_and");
+    //let training_path = PathBuf::from("/home/robert/Projects/ba/images");
+    //let label_path = PathBuf::from("/home/robert/Projects/ba/mask_and");
 
     let label_type = LabelType::Img(label_path);
 
-    let mut ans = AnsPathBuilder::new().set_img_dir(training_path).set_label_type(label_type).set_split_size(Some((224u32, 224u32))).set_split_offset((Some(SplitOffset::Val(50u32)), Some(SplitOffset::Val(50u32)))).set_batches(250).build();
+    let mut ans = AnsPathBuilder::new().set_img_dir(training_path).set_label_type(label_type).set_split_size(Some((224u32, 224u32))).set_split_offset((Some(SplitOffset::Val(100u32)), Some(SplitOffset::Val(100u32)))).set_batches(1000).build();
 
 
     let splitimage_vec  = ans.fill_split_vec();
