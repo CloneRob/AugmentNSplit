@@ -40,7 +40,7 @@ impl<'a> Ans {
         file.write_all(&img_buffer[..]);
     }
 
-    pub fn convert_vec_to_binary(&self, split_vec: Vec<SplitImage>) {
+    pub fn convert_vec_to_binary(&self, split_vec: &Vec<SplitImage>, batch_cnt: usize) {
         let split_size = self.get_split_size();
         let buffer_length = (split_size.0 * split_size.1)  as usize;
         let batch_size = if let Some(bs) = self.batches {
@@ -48,8 +48,8 @@ impl<'a> Ans {
         } else {
             1
         };
-        let mut img_cnt = 0usize;
-        let mut batch_cnt = 0usize;
+
+        let mut img_cnt = 1usize;
 
         let mut red_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
         let mut green_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
@@ -79,9 +79,6 @@ impl<'a> Ans {
                 img_cnt += 1;
             } else {
                 self.write_to_file(&img_buffer, batch_cnt);
-                img_buffer.clear();
-                batch_cnt += 1;
-                img_cnt = 0;
             }
 
 
@@ -89,6 +86,83 @@ impl<'a> Ans {
             green_buffer.clear();
             blue_buffer.clear();
 
+        }
+    }
+    pub fn split(&mut self) {
+        let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
+
+        let mut splitimage_vec: Vec<SplitImage> = Vec::new();
+
+        let set_percentage: f32 = 0.20;
+        let mut batch_cnt = 0;
+
+        if let Some((x_len, y_len)) = self.split_size {
+            if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
+
+                let x_offset = SplitOffset::get_value(&x_offset);
+                let y_offset = SplitOffset::get_value(&y_offset);
+
+                for (name, img_tuple) in img_reader.img_map.iter_mut() {
+                    let (x_dim, y_dim) = img_tuple.0.dimensions();
+
+
+                    let mut y_current = 0u32;
+                    while y_current <= y_dim - y_len {
+
+                        let mut x_current = 0u32;
+                        while x_current <= x_dim - x_len {
+
+                            if let Some(split_img) = Ans::split_image(&name,
+                                                                      img_tuple,
+                                                                      x_current,
+                                                                      y_current,
+                                                                      x_len,
+                                                                      y_len,
+                                                                      set_percentage) {
+                                  batch_cnt = self.push_vec(split_img, &mut splitimage_vec, batch_cnt);
+                            }
+                            x_current += x_offset;
+                        }
+                        y_current += y_offset;
+                    }
+                }
+            } else {
+                panic!("aborting Ans::fill_split_vec() due to no offset being specified");
+            }
+        } else {
+            for (name, img_tuple) in img_reader.img_map.iter_mut() {
+                let label = Label::determine_label(&img_tuple.1, [0, 0, 0], set_percentage);
+                let dimension = img_tuple.0.dimensions();
+
+
+                let split_img = SplitImage::new(name.clone(),
+                                                    img_tuple.0.clone(),
+                                                    label,
+                                                    (dimension.0, dimension.1),
+                                                    0u32,
+                                                    0u32);
+                batch_cnt = self.push_vec(split_img, &mut splitimage_vec, batch_cnt);
+            }
+        }
+
+    }
+    fn push_vec(&self, img: SplitImage, vec: &mut Vec<SplitImage>, batch_cnt: usize) -> usize {
+        if let Some(batch_size) = self.batches {
+            if vec.len() < batch_size {
+                vec.push(img);
+                batch_cnt
+            } else {
+                println!("Creating new batch");
+                self.convert_vec_to_binary(vec, batch_cnt);
+                vec.clear();
+                vec.push(img);
+                batch_cnt + 1
+            }
+        } else {
+            self.convert_vec_to_binary(vec, batch_cnt);
+            vec.clear();
+            vec.push(img);
+            batch_cnt + 1
         }
     }
     pub fn fill_split_vec(&mut self) -> Vec<SplitImage> {
