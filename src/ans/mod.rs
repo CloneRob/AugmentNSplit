@@ -21,7 +21,7 @@ pub struct Ans {
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
 
     // None for batches meaning single files for each split image
-    batches: Option<usize>,
+    return_type: ReturnType,
 
     // Discribes a color and a percentage (f32 beeing between 0.0 and 1.0), for discarding Images
     // which contain more than x percent of color pixels
@@ -43,11 +43,7 @@ impl<'a> Ans {
     pub fn convert_vec_to_binary(&self, split_vec: &Vec<SplitImage>, batch_cnt: usize) {
         let split_size = self.get_split_size();
         let buffer_length = (split_size.0 * split_size.1)  as usize;
-        let batch_size = if let Some(bs) = self.batches {
-            bs
-        } else {
-            1
-        };
+
 
         let mut img_cnt = 1usize;
 
@@ -94,7 +90,7 @@ impl<'a> Ans {
         let mut splitimage_vec: Vec<SplitImage> = Vec::new();
 
         let set_percentage: f32 = 0.20;
-        let mut batch_cnt = 0;
+        let mut batch_cnt = 1;
 
         if let Some((x_len, y_len)) = self.split_size {
             if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
@@ -104,7 +100,6 @@ impl<'a> Ans {
 
                 for (name, img_tuple) in img_reader.img_map.iter_mut() {
                     let (x_dim, y_dim) = img_tuple.0.dimensions();
-
 
                     let mut y_current = 0u32;
                     while y_current <= y_dim - y_len {
@@ -134,7 +129,6 @@ impl<'a> Ans {
                 let label = Label::determine_label(&img_tuple.1, [0, 0, 0], set_percentage);
                 let dimension = img_tuple.0.dimensions();
 
-
                 let split_img = SplitImage::new(name.clone(),
                                                     img_tuple.0.clone(),
                                                     label,
@@ -144,7 +138,6 @@ impl<'a> Ans {
                 batch_cnt = self.push_vec(split_img, &mut splitimage_vec, batch_cnt);
             }
         }
-
     }
     fn push_vec(&self, img: SplitImage, vec: &mut Vec<SplitImage>, batch_cnt: usize) -> usize {
         if let Some(batch_size) = self.batches {
@@ -394,7 +387,7 @@ pub struct AnsPathBuilder {
 
     split_size: Option<(u32, u32)>,
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
-    batches: Option<usize>,
+    return_type: Option<ReturnType>,
 }
 
 impl AnsPathBuilder {
@@ -404,7 +397,7 @@ impl AnsPathBuilder {
             label_type: None,
             split_size: None,
             split_offset: (None, None),
-            batches: None,
+            return_type: None,
         }
     }
     pub fn set_img_dir(mut self, path: PathBuf) -> AnsPathBuilder {
@@ -432,8 +425,8 @@ impl AnsPathBuilder {
         self.split_offset = offset;
         self
     }
-    pub fn set_batches(mut self, batches: usize) -> AnsPathBuilder {
-        self.batches = Some(batches);
+    pub fn set_img_type(mut self, return_type: ReturnType) -> AnsPathBuilder {
+        self.return_type = return_type;
         self
     }
 
@@ -444,10 +437,23 @@ impl AnsPathBuilder {
                             .expect("Called AnsPathBuilder.build() without setting label_type"),
             split_size: self.split_size,
             split_offset: self.split_offset,
-            batches: self.batches,
+            return_type: self.return_type,
             discard_barrier: None,
         }
     }
+}
+pub struct ReturnType {
+    layout: ImgLayout,
+    format: ImgFormat,
+}
+pub enum ImgLayout {
+    ColorChannel,
+    HumanReadable,
+}
+
+pub enum ImgFormat {
+    Binary{batche_size: usize},
+    Img(ImageFormat),
 }
 
 pub enum Label {
