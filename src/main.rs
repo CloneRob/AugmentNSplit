@@ -16,7 +16,7 @@ use std::ffi::OsString;
 use img_reader::{ImgReader, LabelType};
 
 use image::*;
-use ans::{Ans, AnsPathBuilder, SplitOffset};
+use ans::{Ans, SplitOffset};
 
 fn main() {
 
@@ -30,6 +30,7 @@ fn main() {
 
     let label_type = LabelType::Img(label_path);
 
+    /*
     let mut ans = AnsPathBuilder::new().set_img_dir(training_path)
                                        .set_label_type(label_type)
                                        .set_split_size(Some((224u32, 224u32)))
@@ -38,4 +39,5 @@ fn main() {
                                        .build();
 
     ans.split();
+    */
 }

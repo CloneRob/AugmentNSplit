@@ -11,6 +11,16 @@ use xml::reader::{EventReader, XmlEvent, Error};
 use img_reader::{ImgReader, LabelType};
 use image::*;
 
+mod label;
+mod return_type;
+mod split_image;
+mod ans_builder;
+
+use self::label::*;
+use self::return_type::*;
+use self::split_image::*;
+use self::ans_builder::*;
+
 
 pub struct Ans {
     img_dir: PathBuf,
@@ -21,7 +31,7 @@ pub struct Ans {
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
 
     // None for batches meaning single files for each split image
-    return_type: ReturnType,
+    return_type: return_type::ReturnType,
 
     // Discribes a color and a percentage (f32 beeing between 0.0 and 1.0), for discarding Images
     // which contain more than x percent of color pixels
@@ -40,50 +50,31 @@ impl<'a> Ans {
         file.write_all(&img_buffer[..]);
     }
 
-    pub fn convert_vec_to_binary(&self, split_vec: &Vec<SplitImage>, batch_cnt: usize) {
+    fn to_color_groups(&self, split_image: &mut SplitImage) {
         let split_size = self.get_split_size();
         let buffer_length = (split_size.0 * split_size.1)  as usize;
-
-
-        let mut img_cnt = 1usize;
 
         let mut red_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
         let mut green_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
         let mut blue_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
 
-        let mut img_buffer: Vec<u8> = Vec::with_capacity(batch_size * (buffer_length * 3 + 1));
+        let mut img_buffer: Vec<u8> = Vec::with_capacity(buffer_length * 3 + 1);
 
-        for img in split_vec {
-            for pixel in img.image.pixels() {
-                // pixel.data contains values for red, green and blue channel
-                // of the pixel
-                red_buffer.push(pixel.data[0]);
-                green_buffer.push(pixel.data[1]);
-                blue_buffer.push(pixel.data[2]);
-            }
-
-            if img_cnt < batch_size {
-
-                match img.label {
-                    Label::Healthy => img_buffer.push(0),
-                    Label::Sick => img_buffer.push(1),
-                }
-
-                img_buffer.append(&mut red_buffer);
-                img_buffer.append(&mut green_buffer);
-                img_buffer.append(&mut blue_buffer);
-                img_cnt += 1;
-            } else {
-                self.write_to_file(&img_buffer, batch_cnt);
-            }
-
-
-            red_buffer.clear();
-            green_buffer.clear();
-            blue_buffer.clear();
-
+        for pixel in split_image.get_image().pixels() {
+            // pixel.data contains values for red, green and blue channel
+            // of the pixel
+            red_buffer.push(pixel.data[0]);
+            green_buffer.push(pixel.data[1]);
+            blue_buffer.push(pixel.data[2]);
         }
+
+        img_buffer.append(&mut red_buffer);
+        img_buffer.append(&mut green_buffer);
+        img_buffer.append(&mut blue_buffer);
+
+        split_image.set_image(ImageBuffer::from_raw(split_size.0, split_size.1, img_buffer).unwrap())
     }
+
     pub fn split(&mut self) {
         let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
 
@@ -107,7 +98,7 @@ impl<'a> Ans {
                         let mut x_current = 0u32;
                         while x_current <= x_dim - x_len {
 
-                            if let Some(split_img) = Ans::split_image(&name,
+                            if let Some(split_img) = self.split_image(&name,
                                                                       img_tuple,
                                                                       x_current,
                                                                       y_current,
@@ -140,81 +131,24 @@ impl<'a> Ans {
         }
     }
     fn push_vec(&self, img: SplitImage, vec: &mut Vec<SplitImage>, batch_cnt: usize) -> usize {
-        if let Some(batch_size) = self.batches {
-            if vec.len() < batch_size {
-                vec.push(img);
-                batch_cnt
-            } else {
-                println!("Creating new batch");
-                self.convert_vec_to_binary(vec, batch_cnt);
-                vec.clear();
-                vec.push(img);
-                batch_cnt + 1
-            }
-        } else {
-            self.convert_vec_to_binary(vec, batch_cnt);
-            vec.clear();
-            vec.push(img);
-            batch_cnt + 1
-        }
-    }
-    pub fn fill_split_vec(&mut self) -> Vec<SplitImage> {
-
-        let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
-
-        let mut splitimage_vec: Vec<SplitImage> = Vec::new();
-
-        let set_percentage: f32 = 0.20;
-
-        if let Some((x_len, y_len)) = self.split_size {
-            if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
-
-                let x_offset = SplitOffset::get_value(&x_offset);
-                let y_offset = SplitOffset::get_value(&y_offset);
-
-                for (name, img_tuple) in img_reader.img_map.iter_mut() {
-                    let (x_dim, y_dim) = img_tuple.0.dimensions();
-
-
-                    let mut y_current = 0u32;
-                    while y_current <= y_dim - y_len {
-                        let mut x_current = 0u32;
-                        while x_current <= x_dim - x_len {
-                            if let Some(split_img) = Ans::split_image(&name,
-                                                                      img_tuple,
-                                                                      x_current,
-                                                                      y_current,
-                                                                      x_len,
-                                                                      y_len,
-                                                                      set_percentage) {
-                                splitimage_vec.push(split_img);
-                            }
-                            x_current += x_offset;
-                        }
-                        y_current += y_offset;
-                    }
+        match *self.return_type.get_format() {
+            ImgFormat::Binary{batch_size: b } => {
+                if vec.len() < b {
+                    vec.push(img);
+                    batch_cnt
+                } else {
+                    vec.clear();
+                    vec.push(img);
+                    batch_cnt
                 }
-            } else {
-                panic!("aborting Ans::fill_split_vec() due to no offset being specified");
-            }
-        } else {
-            for (name, img_tuple) in img_reader.img_map.iter_mut() {
-                let label = Label::determine_label(&img_tuple.1, [0, 0, 0], set_percentage);
-                let dimension = img_tuple.0.dimensions();
-
-
-                splitimage_vec.push(SplitImage::new(name.clone(),
-                                                    img_tuple.0.clone(),
-                                                    label,
-                                                    (dimension.0, dimension.1),
-                                                    0u32,
-                                                    0u32));
-            }
+            },
+            ImgFormat::Img(img_format) =>
+                batch_cnt
         }
-        splitimage_vec
     }
 
-    fn split_image(name: &OsString,
+
+    fn split_image(&self, name: &OsString,
                    img_tuple: &mut (ImageBuffer<Rgb<u8>, Vec<u8>>, ImageBuffer<Rgb<u8>, Vec<u8>>),
                    x_current: u32,
                    y_current: u32,
@@ -222,6 +156,7 @@ impl<'a> Ans {
                    y_len: u32,
                    set_percentage: f32)
                    -> Option<SplitImage> {
+
         let split_img = imageops::crop(&mut img_tuple.0, x_current, y_current, x_len, y_len)
                             .to_image();
         let (x_dim, y_dim) = split_img.dimensions();
@@ -229,17 +164,22 @@ impl<'a> Ans {
             println!("{} {}", x_dim, y_dim);
         }
         if !Ans::check_color(&split_img, [0, 0, 0], set_percentage) {
-
             let split_label = imageops::crop(&mut img_tuple.1, x_current, y_current, x_len, y_len)
                                   .to_image();
             let label = Label::determine_label(&split_label, [0, 0, 0], set_percentage);
 
-            Some(SplitImage::new(name.clone(),
+            let mut split_img = SplitImage::new(name.clone(),
                                  split_img,
                                  label,
                                  (x_len, y_len),
                                  x_current,
-                                 y_current))
+                                 y_current);
+
+            match *self.return_type.get_format() {
+                ImgFormat::Binary{..} => self.to_color_groups(&mut split_img),
+                _ => (),
+            }
+            Some(split_img)
         } else {
             None
         }
@@ -378,127 +318,5 @@ impl SplitOffset {
             SplitOffset::Val(x) => x,
         }
 
-    }
-}
-
-pub struct AnsPathBuilder {
-    img_dir: Option<PathBuf>,
-    label_type: Option<LabelType>,
-
-    split_size: Option<(u32, u32)>,
-    split_offset: (Option<SplitOffset>, Option<SplitOffset>),
-    return_type: Option<ReturnType>,
-}
-
-impl AnsPathBuilder {
-    pub fn new() -> AnsPathBuilder {
-        AnsPathBuilder {
-            img_dir: None,
-            label_type: None,
-            split_size: None,
-            split_offset: (None, None),
-            return_type: None,
-        }
-    }
-    pub fn set_img_dir(mut self, path: PathBuf) -> AnsPathBuilder {
-        self.img_dir = Some(path);
-        self
-    }
-
-    pub fn set_label_type(mut self, label_type: LabelType) -> AnsPathBuilder {
-        self.label_type = Some(label_type);
-        self
-    }
-    pub fn set_split_size(mut self, size: Option<(u32, u32)>) -> AnsPathBuilder {
-        self.split_size = size;
-        self
-    }
-
-    pub fn set_split_offset(mut self,
-                            mut offset: (Option<SplitOffset>, Option<SplitOffset>))
-                            -> AnsPathBuilder {
-        if let (Some(so1), Some(so2)) = offset.clone() {
-            if so1.get_value() == 0 || so2.get_value() == 0 {
-                offset = (None, None);
-            }
-        }
-        self.split_offset = offset;
-        self
-    }
-    pub fn set_img_type(mut self, return_type: ReturnType) -> AnsPathBuilder {
-        self.return_type = return_type;
-        self
-    }
-
-    pub fn build(self) -> Ans {
-        Ans {
-            img_dir: self.img_dir.expect("Called AnsPathBuilder.build() without setting img_dir"),
-            label_type: self.label_type
-                            .expect("Called AnsPathBuilder.build() without setting label_type"),
-            split_size: self.split_size,
-            split_offset: self.split_offset,
-            return_type: self.return_type,
-            discard_barrier: None,
-        }
-    }
-}
-pub struct ReturnType {
-    layout: ImgLayout,
-    format: ImgFormat,
-}
-pub enum ImgLayout {
-    ColorChannel,
-    HumanReadable,
-}
-
-pub enum ImgFormat {
-    Binary{batche_size: usize},
-    Img(ImageFormat),
-}
-
-pub enum Label {
-    Sick,
-    Healthy,
-}
-
-impl Label {
-    pub fn determine_label(label_image: &ImageBuffer<Rgb<u8>, Vec<u8>>,
-                           color: [u8; 3],
-                           set_percentage: f32)
-                           -> Label {
-        let label = if Ans::check_color(&label_image, color, set_percentage) {
-            Label::Sick
-        } else {
-            Label::Healthy
-        };
-        label
-    }
-}
-
-pub struct SplitImage {
-    source: OsString,
-    image: RgbImage,
-    label: Label,
-    dimension: (u32, u32),
-    x_offset: u32,
-    y_offset: u32,
-}
-
-impl SplitImage {
-    pub fn new(src: OsString,
-               img: RgbImage,
-               label: Label,
-               dim: (u32, u32),
-               x: u32,
-               y: u32)
-               -> SplitImage {
-        SplitImage {
-            source: src,
-            image: img,
-            label: label,
-            dimension: dim,
-            x_offset: x,
-            y_offset: y,
-        }
     }
 }
