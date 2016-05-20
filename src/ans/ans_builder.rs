@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 use img_reader::LabelType;
 use ans::{Ans, SplitOffset};
-use ans::return_type::ReturnType;
+use ans::return_type::{ReturnType, ImgFormat};
+
+use image;
 
 
 pub struct AnsPathBuilder {
@@ -10,7 +12,7 @@ pub struct AnsPathBuilder {
 
     split_size: Option<(u32, u32)>,
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
-    return_type: Option<ReturnType>,
+    img_format: Option<ImgFormat>,
 }
 
 impl AnsPathBuilder {
@@ -20,7 +22,7 @@ impl AnsPathBuilder {
             label_type: None,
             split_size: None,
             split_offset: (None, None),
-            return_type: None,
+            img_format: None,
         }
     }
     pub fn set_img_dir(mut self, path: PathBuf) -> AnsPathBuilder {
@@ -48,8 +50,8 @@ impl AnsPathBuilder {
         self.split_offset = offset;
         self
     }
-    pub fn set_img_type(mut self, return_type: ReturnType) -> AnsPathBuilder {
-        self.return_type = Some(return_type);
+    pub fn set_img_type(mut self, format: image::ImageFormat) -> AnsPathBuilder {
+        self.img_format = Some(ImgFormat::Img(format));
         self
     }
 
@@ -60,7 +62,7 @@ impl AnsPathBuilder {
                             .expect("Called AnsPathBuilder.build() without setting label_type"),
             split_size: self.split_size,
             split_offset: self.split_offset,
-            return_type: self.return_type.unwrap(),
+            img_format: self.img_format.unwrap(),
             discard_barrier: None,
         }
     }

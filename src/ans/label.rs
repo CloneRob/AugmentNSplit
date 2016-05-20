@@ -1,6 +1,7 @@
 use image::{Rgb, ImageBuffer};
 use ans::Ans;
 
+#[derive(Debug, Clone)]
 pub enum Label {
     Sick,
     Healthy,
@@ -8,14 +9,19 @@ pub enum Label {
 
 impl Label {
     pub fn determine_label(label_image: &ImageBuffer<Rgb<u8>, Vec<u8>>,
-                           color: [u8; 3],
-                           set_percentage: f32)
+                           color: [u8; 3])
                            -> Label {
-        let label = if Ans::check_color(&label_image, color, set_percentage) {
-            Label::Sick
+
+        //let set_percentage = 0.2;
+        let major_color = Ans::majority_color(&label_image);
+        if let Some(mj) = major_color {
+            if mj.0 == color {
+                Label::Sick
+            } else {
+                Label::Healthy
+            }
         } else {
             Label::Healthy
-        };
-        label
+        }
     }
 }

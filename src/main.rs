@@ -17,27 +17,27 @@ use img_reader::{ImgReader, LabelType};
 
 use image::*;
 use ans::{Ans, SplitOffset};
+use ans::ans_builder::AnsPathBuilder;
+
 
 fn main() {
 
     //let config_path = PathBuf::from("/home/robert/Projects/rust/AugmentNSplit/test_config.xml");
 
-    //let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/images");
-    //let label_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/mask_and");
+    let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/image_subset");
+    let label_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/mask_subset");
 
-    let training_path = PathBuf::from("/home/robert/Projects/ba/images");
-    let label_path = PathBuf::from("/home/robert/Projects/ba/mask_and");
+    //let training_path = PathBuf::from("/home/robert/Projects/ba/images");
+    //let label_path = PathBuf::from("/home/robert/Projects/ba/mask_and");
 
     let label_type = LabelType::Img(label_path);
 
-    /*
     let mut ans = AnsPathBuilder::new().set_img_dir(training_path)
                                        .set_label_type(label_type)
                                        .set_split_size(Some((224u32, 224u32)))
                                        .set_split_offset((Some(SplitOffset::Val(100u32)), Some(SplitOffset::Val(100u32))))
-                                       .set_batches(1000)
+                                       .set_img_type(ImageFormat::PNG)
                                        .build();
 
     ans.split();
-    */
 }

@@ -12,9 +12,9 @@ use img_reader::{ImgReader, LabelType};
 use image::*;
 
 mod label;
-mod return_type;
+pub mod return_type;
 mod split_image;
-mod ans_builder;
+pub mod ans_builder;
 
 use self::label::*;
 use self::return_type::*;
@@ -30,27 +30,72 @@ pub struct Ans {
     // offset for x and y values
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
 
-    // None for batches meaning single files for each split image
-    return_type: return_type::ReturnType,
-
+    img_format: ImgFormat,
     // Discribes a color and a percentage (f32 beeing between 0.0 and 1.0), for discarding Images
     // which contain more than x percent of color pixels
     discard_barrier: Option<([u8; 3], f32)>,
 }
 
 impl<'a> Ans {
-    fn write_to_file(&self, img_buffer: &Vec<u8>, batch_cnt: usize) {
+    fn write_to_file(&self, split_image: SplitImage, line_file: &mut String) {
         let path = self.img_dir.clone();
-        let mut batch_path = path.parent().unwrap().to_path_buf();
-        batch_path.push(Path::new(&("training_data/data_batch_".to_string() +
-                                    &*batch_cnt.to_string() +
-                                    ".bin")[..]));
+        let mut image_path = path.parent().unwrap().to_path_buf();
+        image_path.push(Path::new("training_data/"));
+        let name = self.create_name(&split_image);
+        image_path.push(Path::new(&name[..]));
 
-        let mut file = File::create(batch_path).unwrap();
-        file.write_all(&img_buffer[..]);
+        if let Some(image) = split_image.image {
+            image.save(&image_path);
+        }
+
+        line_file.push_str("/");
+        line_file.push_str(&name);
+        if let Some(label) = split_image.label {
+            match label {
+                Label::Sick => line_file.push_str(" 1"),
+                Label::Healthy => line_file.push_str(" 0"),
+            }
+            line_file.push_str("\n");
+        }
     }
 
-    fn to_color_groups(&self, split_image: &mut SplitImage) {
+    fn write_line_file(&self, line_file: String) {
+        let path = self.img_dir.clone();
+        let mut file_path = path.parent().unwrap().to_path_buf();
+        file_path.push(Path::new("training_data/"));
+
+        let mut file = File::create(file_path.join("image_description.txt")).unwrap();
+        file.write_all(&line_file.into_bytes()[..]);
+    }
+
+    fn create_name(&self, split_image: &SplitImage) -> String {
+        let split_name = split_image.get_name();
+        let mut name = if let Some(dot_index) = split_name.char_indices().find(|&c| c.1 == '.') {
+            let name = String::from(split_name.split_at(dot_index.0).0);
+            name
+        } else {
+            String::new()
+        };
+
+        name.push('_');
+        name.push_str(&split_image.get_x_offset().to_string());
+        name.push('_');
+        name.push_str(&split_image.get_y_offset().to_string());
+
+        if let ImgFormat::Img(format) = self.img_format {
+            use image::ImageFormat::*;
+            match format {
+                PNG => name.push_str(".png"),
+                JPEG => name.push_str(".jpg"),
+                BMP => name.push_str(".bmp"),
+                TIFF => name.push_str(".tif"),
+                _ => ()
+            }
+        }
+        name
+    }
+
+    fn to_color_groups(&self, img_crop: RgbImage) -> RgbImage {
         let split_size = self.get_split_size();
         let buffer_length = (split_size.0 * split_size.1)  as usize;
 
@@ -60,7 +105,7 @@ impl<'a> Ans {
 
         let mut img_buffer: Vec<u8> = Vec::with_capacity(buffer_length * 3 + 1);
 
-        for pixel in split_image.get_image().pixels() {
+        for pixel in img_crop.pixels() {
             // pixel.data contains values for red, green and blue channel
             // of the pixel
             red_buffer.push(pixel.data[0]);
@@ -72,16 +117,11 @@ impl<'a> Ans {
         img_buffer.append(&mut green_buffer);
         img_buffer.append(&mut blue_buffer);
 
-        split_image.set_image(ImageBuffer::from_raw(split_size.0, split_size.1, img_buffer).unwrap())
+        ImageBuffer::from_raw(split_size.0, split_size.1, img_buffer).unwrap()
     }
 
     pub fn split(&mut self) {
         let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
-
-        let mut splitimage_vec: Vec<SplitImage> = Vec::new();
-
-        let set_percentage: f32 = 0.20;
-        let mut batch_cnt = 1;
 
         if let Some((x_len, y_len)) = self.split_size {
             if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
@@ -89,7 +129,8 @@ impl<'a> Ans {
                 let x_offset = SplitOffset::get_value(&x_offset);
                 let y_offset = SplitOffset::get_value(&y_offset);
 
-                for (name, img_tuple) in img_reader.img_map.iter_mut() {
+                let mut line_file = String::new();
+                for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
                     let (x_dim, y_dim) = img_tuple.0.dimensions();
 
                     let mut y_current = 0u32;
@@ -97,89 +138,42 @@ impl<'a> Ans {
 
                         let mut x_current = 0u32;
                         while x_current <= x_dim - x_len {
-
-                            if let Some(split_img) = self.split_image(&name,
-                                                                      img_tuple,
-                                                                      x_current,
-                                                                      y_current,
-                                                                      x_len,
-                                                                      y_len,
-                                                                      set_percentage) {
-                                  batch_cnt = self.push_vec(split_img, &mut splitimage_vec, batch_cnt);
+                            let split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, x_current, y_current);
+                            if let Some(split_image) = self.split_image(split_image, &mut img_tuple) {
+                                self.write_to_file(split_image, &mut line_file)
                             }
                             x_current += x_offset;
                         }
                         y_current += y_offset;
                     }
                 }
-            } else {
-                panic!("aborting Ans::fill_split_vec() due to no offset being specified");
-            }
-        } else {
-            for (name, img_tuple) in img_reader.img_map.iter_mut() {
-                let label = Label::determine_label(&img_tuple.1, [0, 0, 0], set_percentage);
-                let dimension = img_tuple.0.dimensions();
+                self.write_line_file(line_file)
 
-                let split_img = SplitImage::new(name.clone(),
-                                                    img_tuple.0.clone(),
-                                                    label,
-                                                    (dimension.0, dimension.1),
-                                                    0u32,
-                                                    0u32);
-                batch_cnt = self.push_vec(split_img, &mut splitimage_vec, batch_cnt);
             }
         }
     }
-    fn push_vec(&self, img: SplitImage, vec: &mut Vec<SplitImage>, batch_cnt: usize) -> usize {
-        match *self.return_type.get_format() {
-            ImgFormat::Binary{batch_size: b } => {
-                if vec.len() < b {
-                    vec.push(img);
-                    batch_cnt
-                } else {
-                    vec.clear();
-                    vec.push(img);
-                    batch_cnt
-                }
-            },
-            ImgFormat::Img(img_format) =>
-                batch_cnt
-        }
-    }
 
-
-    fn split_image(&self, name: &OsString,
-                   img_tuple: &mut (ImageBuffer<Rgb<u8>, Vec<u8>>, ImageBuffer<Rgb<u8>, Vec<u8>>),
-                   x_current: u32,
-                   y_current: u32,
-                   x_len: u32,
-                   y_len: u32,
-                   set_percentage: f32)
+    fn split_image(&self, mut split_image: SplitImage,
+                   img_tuple: &mut (ImageBuffer<Rgb<u8>, Vec<u8>>, ImageBuffer<Rgb<u8>, Vec<u8>>))
                    -> Option<SplitImage> {
 
-        let split_img = imageops::crop(&mut img_tuple.0, x_current, y_current, x_len, y_len)
-                            .to_image();
-        let (x_dim, y_dim) = split_img.dimensions();
-        if x_dim < x_len || y_dim < y_len {
-            println!("{} {}", x_dim, y_dim);
-        }
-        if !Ans::check_color(&split_img, [0, 0, 0], set_percentage) {
-            let split_label = imageops::crop(&mut img_tuple.1, x_current, y_current, x_len, y_len)
-                                  .to_image();
-            let label = Label::determine_label(&split_label, [0, 0, 0], set_percentage);
+        let img_crop = imageops::crop(&mut img_tuple.0, split_image.get_x_offset(), split_image.get_y_offset(), split_image.get_x_dim(), split_image.get_y_dim()).to_image();
 
-            let mut split_img = SplitImage::new(name.clone(),
-                                 split_img,
-                                 label,
-                                 (x_len, y_len),
-                                 x_current,
-                                 y_current);
+        let set_percentage: f32 = 0.20;
 
-            match *self.return_type.get_format() {
-                ImgFormat::Binary{..} => self.to_color_groups(&mut split_img),
-                _ => (),
+        if !Ans::check_color(&img_crop, [0, 0, 0], set_percentage) {
+            let label_crop = imageops::crop(&mut img_tuple.1, split_image.get_x_offset(), split_image.get_y_offset(), split_image.get_x_dim(), split_image.get_y_dim()).to_image();
+
+            let label = Label::determine_label(&label_crop, [255, 255, 255]);
+            split_image.label = Some(label);
+
+            if let ImgFormat::Binary{..} = self.img_format {
+                split_image.image = Some(self.to_color_groups(img_crop));
+            } else {
+                split_image.image = Some(img_crop);
             }
-            Some(split_img)
+
+            Some(split_image)
         } else {
             None
         }
@@ -238,6 +232,7 @@ impl<'a> Ans {
         }
     }
 
+    /*
     fn parse_img_dir(xml_events: &mut EventReader<BufReader<File>>,
                      path_builder: &mut AnsPathBuilder) {
         while let Ok(xml_event) = xml_events.next() {
@@ -302,8 +297,8 @@ impl<'a> Ans {
         }
         unimplemented!()
     }
+    */
 }
-
 #[derive(Clone)]
 pub enum SplitOffset {
     Random,
