@@ -35,7 +35,7 @@ fn main() {
     let mut ans = AnsPathBuilder::new().set_img_dir(training_path)
                                        .set_label_type(label_type)
                                        .set_split_size(Some((224u32, 224u32)))
-                                       .set_split_offset((Some(SplitOffset::Val(100u32)), Some(SplitOffset::Val(100u32))))
+                                       .set_split_offset((Some(SplitOffset::Val(180u32)), Some(SplitOffset::Val(100u32))))
                                        .set_img_type(ImageFormat::PNG)
                                        .build();
 

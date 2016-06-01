@@ -6,6 +6,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
 
+use rand::{thread_rng, sample};
+
 use xml::reader::{EventReader, XmlEvent, Error};
 
 use img_reader::{ImgReader, LabelType};
@@ -118,6 +120,86 @@ impl<'a> Ans {
         img_buffer.append(&mut blue_buffer);
 
         ImageBuffer::from_raw(split_size.0, split_size.1, img_buffer).unwrap()
+    }
+
+    pub fn oversample_split(&mut self) {
+        let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
+        if let Some((x_len, y_len)) = self.split_size {
+            if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
+
+                let x_offset = SplitOffset::get_value(&x_offset);
+                let y_offset = SplitOffset::get_value(&y_offset);
+
+                let mut line_file = String::new();
+                for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
+                    let (x_dim, y_dim) = img_tuple.0.dimensions();
+
+                    let mut y_current = 0u32;
+                    while y_current <= y_dim - y_len {
+
+                        let mut x_current = 0u32;
+                        while x_current <= x_dim - x_len {
+                            let split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, x_current, y_current);
+                            if let Some(split_image) = self.split_first_pass(split_image, &mut img_tuple) {
+                                self.write_to_file(split_image, &mut line_file)
+                            }
+                            x_current += x_offset;
+                        }
+                        y_current += y_offset;
+                    }
+                    let sick = img_tuple.1.enumerate_pixels().filter(|x| x.2.data == [255, 255, 255]).map(|x| (x.0, x.1)).collect::<Vec<_>>();
+                    let mut rng = thread_rng();
+                    let sick_len = sick.len();
+                    let sample = sample(&mut rng, sick, (0.005 * sick_len as f32) as usize);
+
+                    for s in sample {
+                        let cropped_image = imageops::crop(&mut img_tuple.0, s.0, s.1, x_len, y_len).to_image();
+                        let mut split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, s.0, s.1);
+                        let label = Label::determine_label(&cropped_image, [255, 255, 255]);
+                        if let Label::Sick = label {
+                            split_image.label = Some(label);
+
+                            if let ImgFormat::Binary{..} = self.img_format {
+                                split_image.image = Some(self.to_color_groups(cropped_image));
+                            } else {
+                                split_image.image = Some(cropped_image);
+                            }
+                            self.write_to_file(split_image, &mut line_file)
+                        }
+                    }
+                }
+                self.write_line_file(line_file)
+            }
+        }
+    }
+
+    fn split_first_pass(&self, mut split_image: SplitImage,
+                   img_tuple: &mut (ImageBuffer<Rgb<u8>, Vec<u8>>, ImageBuffer<Rgb<u8>, Vec<u8>>))
+                   -> Option<SplitImage> {
+
+        let img_crop = imageops::crop(&mut img_tuple.0, split_image.get_x_offset(), split_image.get_y_offset(), split_image.get_x_dim(), split_image.get_y_dim()).to_image();
+
+        let set_percentage: f32 = 0.20;
+
+        if !Ans::check_color(&img_crop, [0, 0, 0], set_percentage) {
+            let label_crop = imageops::crop(&mut img_tuple.1, split_image.get_x_offset(), split_image.get_y_offset(), split_image.get_x_dim(), split_image.get_y_dim()).to_image();
+
+            let label = Label::determine_label(&label_crop, [255, 255, 255]);
+            if let Label::Healthy = label {
+                split_image.label = Some(label);
+
+                if let ImgFormat::Binary{..} = self.img_format {
+                    split_image.image = Some(self.to_color_groups(img_crop));
+                } else {
+                    split_image.image = Some(img_crop);
+                }
+                Some(split_image)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub fn split(&mut self) {
