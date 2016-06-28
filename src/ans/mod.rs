@@ -1,10 +1,13 @@
 use std::fs::File;
 use std::io::prelude::*;
+use std::fs::OpenOptions;
 use std::ffi::OsString;
 use std::io::BufReader;
+use std::fs::DirBuilder;
 use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use rand::{thread_rng, sample};
 
@@ -36,13 +39,28 @@ pub struct Ans {
     // Discribes a color and a percentage (f32 beeing between 0.0 and 1.0), for discarding Images
     // which contain more than x percent of color pixels
     discard_barrier: Option<([u8; 3], f32)>,
+
+    rotation: u8,
+
+    output_real: PathBuf,
+    output_mask: Option<PathBuf>,
+
 }
 
 impl<'a> Ans {
+    pub fn get_imgdir(&self) -> PathBuf {
+        self.img_dir.clone()
+    }
+
+    pub fn get_label_type(&self) -> LabelType {
+        self.label_type.clone()
+    }
     fn write_to_file(&self, split_image: SplitImage, line_file: &mut String) {
         let path = self.img_dir.clone();
         let mut image_path = path.parent().unwrap().to_path_buf();
-        image_path.push(Path::new("training_data/"));
+        image_path.push(self.output_real.clone());
+
+        DirBuilder::new().recursive(true).create(&image_path).unwrap();
         let name = self.create_name(&split_image);
         image_path.push(Path::new(&name[..]));
 
@@ -64,10 +82,19 @@ impl<'a> Ans {
     fn write_line_file(&self, line_file: String) {
         let path = self.img_dir.clone();
         let mut file_path = path.parent().unwrap().to_path_buf();
-        file_path.push(Path::new("training_data/"));
+        file_path.push(self.output_real.clone());
 
-        let mut file = File::create(file_path.join("image_description.txt")).unwrap();
-        file.write_all(&line_file.into_bytes()[..]);
+        DirBuilder::new().recursive(true).create(&file_path).unwrap();
+
+        //let mut file = File::create(file_path.join("image_description.txt")).unwrap();
+        let mut file = OpenOptions::new()
+                                    .write(true)
+                                    .append(true)
+                                    .create(true)
+                                    .open(file_path.join("image_description.txt"))
+                                    .unwrap();
+
+        file.write(&line_file.into_bytes()[..]);
     }
 
     fn create_name(&self, split_image: &SplitImage) -> String {
@@ -83,6 +110,13 @@ impl<'a> Ans {
         name.push_str(&split_image.get_x_offset().to_string());
         name.push('_');
         name.push_str(&split_image.get_y_offset().to_string());
+
+        if let Some(ref label) = split_image.label {
+            match *label {
+                Label::Sick => name.push_str("_Sick"),
+                Label::Healthy => name.push_str("_Healthy"),
+            }
+        }
 
         if let ImgFormat::Img(format) = self.img_format {
             use image::ImageFormat::*;
@@ -121,6 +155,158 @@ impl<'a> Ans {
 
         ImageBuffer::from_raw(split_size.0, split_size.1, img_buffer).unwrap()
     }
+    pub fn build_mask_fromfile(&mut self, img_reader: &mut ImgReader, file_path: &Path) {
+        let f = File::open(file_path).unwrap();
+        let reader = BufReader::new(&f);
+        let map = create_splitmap(reader);
+
+        if let Some((x_len, y_len)) = self.split_size {
+            for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
+                let name = name.clone().into_string().unwrap();
+                let split = name.split("_").collect::<Vec<_>>();
+                let mut key = String::from("/");
+                key.push_str(split[0]);
+                key.push_str(split[1]);
+
+                if let Some(coord_vec) = map.get(&key) {
+                    for coords in coord_vec.coords.iter() {
+                        let mask_crop = imageops::crop(&mut img_tuple.1, coords.0, coords.1, x_len, y_len);
+                    }
+                }
+            }
+        }
+    }
+    pub fn build_sick(&mut self, img_reader: &mut ImgReader) {
+        if let Some((x_len, y_len)) = self.split_size {
+
+            let pixels = (x_len * y_len) as f32;
+            let mut line_file = String::new();
+
+            for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
+                let sick_pixel_vec = img_tuple.1.enumerate_pixels()
+                                               .filter(|x| x.2.data == [255, 255, 255])
+                                               .map(|x| (x.0, x.1))
+                                               .collect::<Vec<_>>();
+
+                let sample_size = (0.00065 * sick_pixel_vec.len() as f32) as usize;
+                let mut rng = thread_rng();
+                let sampled_pixels = sample(&mut rng, sick_pixel_vec, sample_size);
+
+                for s in sampled_pixels {
+                    let real_crop = imageops::crop(&mut img_tuple.0, s.0, s.1, x_len, y_len);
+                    let mask_crop = imageops::crop(&mut img_tuple.1, s.0, s.1, x_len, y_len);
+
+                    let mask_color_info = Ans::get_color([255, 255, 255], &mask_crop);
+
+                    if real_crop.dimensions() == (x_len, y_len) {
+                        if mask_color_info.1 / pixels >= 0.70 {
+                            let mut split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, s.0, s.1);
+                            split_image.label = Some(Label::Sick);
+                            split_image.image = Some(real_crop.to_image());
+
+                            self.write_to_file(split_image, &mut line_file)
+                        }
+                    }
+                }
+            }
+            self.write_line_file(line_file)
+        }
+    }
+
+    pub fn build_healthy(&mut self, img_reader: &mut ImgReader) {
+        let black_treshhold = 0.35;
+        let white_treshhold = 0.8;
+
+        if let Some((x_len, y_len)) = self.split_size {
+
+            let pixels = (x_len * y_len) as f32;
+
+            if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
+
+                let x_offset = SplitOffset::get_value(&x_offset);
+                let y_offset = SplitOffset::get_value(&y_offset);
+                println!("x offset: {:?}, y offset: {}", x_offset, y_offset);
+                println!("x len: {:?}, y len: {}", x_len, y_len);
+
+                let mut line_file = String::new();
+
+                for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
+                    let real_dim = img_tuple.0.dimensions();
+                    for i in (0 .. real_dim.0 - x_len + 1).step_by(x_offset) {
+                        for j in (0 .. real_dim.1 - y_len + 1).step_by(y_offset) {
+
+                            let real_crop = imageops::crop(&mut img_tuple.0, i, j, x_len, y_len);
+                            let mask_crop = imageops::crop(&mut img_tuple.1, i, j, x_len, y_len);
+
+                            let real_color_info = Ans::get_color([0, 0, 0], &real_crop);
+                            let mask_color_info = Ans::get_color([255, 255, 255], &mask_crop);
+
+                            if real_color_info.1 / pixels < black_treshhold {
+                                if mask_color_info.1 / pixels < 1.0 - white_treshhold {
+                                    let mut split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, i, j);
+                                    split_image.label = Some(Label::Healthy);
+                                    split_image.image = Some(real_crop.to_image());
+
+                                    self.write_to_file(split_image, &mut line_file)
+                                }
+                            } else {
+                                    println!("thrown out outer" );
+                            }
+                        }
+                    }
+                }
+                self.write_line_file(line_file)
+            }
+        }
+    }
+    pub fn build_split(&mut self, img_reader: &mut ImgReader) {
+
+        let black_treshhold = 0.25;
+        let white_treshhold = 0.8;
+
+        if let Some((x_len, y_len)) = self.split_size {
+
+            let pixels = (x_len * y_len) as f32;
+
+            if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
+
+                let x_offset = SplitOffset::get_value(&x_offset);
+                let y_offset = SplitOffset::get_value(&y_offset);
+
+                let mut line_file = String::new();
+
+                for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
+                    let real_dim = img_tuple.0.dimensions();
+                    for i in (0 .. real_dim.0 - x_len).step_by(x_offset) {
+                        for j in (0 .. real_dim.1 - y_len).step_by(y_offset) {
+                            let real_crop = imageops::crop(&mut img_tuple.0, i, j, x_len, y_len);
+                            let mask_crop = imageops::crop(&mut img_tuple.1, i, j, x_len, y_len);
+
+                            let mask_color_info = Ans::get_color([255, 255, 255], &mask_crop);
+                            let real_color_info = Ans::get_color([0, 0, 0], &real_crop);
+
+
+                            if real_color_info.1 / pixels < black_treshhold {
+                                if mask_color_info.1 / pixels < 1.0 - white_treshhold {
+                                    let mut split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, i, j);
+                                    split_image.label = Some(Label::Healthy);
+                                    split_image.image = Some(real_crop.to_image());
+
+                                    self.write_to_file(split_image, &mut line_file)
+                                }
+                            }
+                        }
+                    }
+                }
+                self.write_line_file(line_file)
+            }
+        }
+    }
+
+    pub fn get_color(color: [u8; 3], image: &SubImage<ImageBuffer<Rgb<u8>, Vec<u8>>>) -> ([u8; 3], f32){
+        let color_cnt = image.pixels().filter(|x| x.2.data == color).count();
+        (color, color_cnt as f32)
+    }
 
     pub fn oversample_split(&mut self) {
         let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
@@ -150,12 +336,16 @@ impl<'a> Ans {
                     let sick = img_tuple.1.enumerate_pixels().filter(|x| x.2.data == [255, 255, 255]).map(|x| (x.0, x.1)).collect::<Vec<_>>();
                     let mut rng = thread_rng();
                     let sick_len = sick.len();
-                    let sample = sample(&mut rng, sick, (0.005 * sick_len as f32) as usize);
+                    let sample = sample(&mut rng, sick, (0.0008 * sick_len as f32) as usize);
 
                     for s in sample {
                         let cropped_image = imageops::crop(&mut img_tuple.0, s.0, s.1, x_len, y_len).to_image();
+                        if cropped_image.dimensions() != (x_len, y_len) {
+                            continue
+                        }
+                        let cropped_label = imageops::crop(&mut img_tuple.1, s.0, s.1, x_len, y_len).to_image();
                         let mut split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, s.0, s.1);
-                        let label = Label::determine_label(&cropped_image, [255, 255, 255]);
+                        let label = Label::determine_label(&cropped_label, [255, 255, 255]);
                         if let Label::Sick = label {
                             split_image.label = Some(label);
 
@@ -202,8 +392,7 @@ impl<'a> Ans {
         }
     }
 
-    pub fn split(&mut self) {
-        let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
+    pub fn split(&mut self, img_reader: &mut ImgReader) {
 
         if let Some((x_len, y_len)) = self.split_size {
             if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
@@ -314,72 +503,6 @@ impl<'a> Ans {
         }
     }
 
-    /*
-    fn parse_img_dir(xml_events: &mut EventReader<BufReader<File>>,
-                     path_builder: &mut AnsPathBuilder) {
-        while let Ok(xml_event) = xml_events.next() {
-            match xml_event {
-                XmlEvent::CData(s) => {
-                    // path_builder.set_img_dir(PathBuf::from(s));
-                }
-                XmlEvent::EndElement { name } => {
-                    if name.local_name == "img_dir" {
-                        break;
-                    }
-                }
-                _ => panic!("Unknown branch found in <img_dir>, please check your configuration"),
-            }
-        }
-    }
-
-    fn parse_label_type(xml_events: &mut EventReader<BufReader<File>>,
-                        path_builder: &mut AnsPathBuilder) {
-        while let Ok(xml_event) = xml_events.next() {
-            match xml_event {
-                XmlEvent::StartElement { name, .. } => {
-                    match &name.local_name[..] {
-                        "label_type" => {}
-                        "label_dir" => {}
-                        _ => unimplemented!(),
-                    }
-                }
-                XmlEvent::EndElement { name, .. } => {
-                    if name.local_name == "label" {
-                        break;
-                    }
-                }
-                _ => unimplemented!(),
-            }
-        }
-    }
-
-    pub fn from_config(config_path: &Path) -> Option<Ans> {
-        let file = File::open(config_path).unwrap();
-        let file = BufReader::new(file);
-
-        let mut parser = EventReader::new(file);
-
-        let mut ans_path_builder = AnsPathBuilder::new();
-
-
-        while let Ok(xml_event) = parser.next() {
-            match xml_event {
-                XmlEvent::StartElement { name, .. } => {
-                    match &name.local_name[..] {
-                        "img_dir" => Ans::parse_img_dir(&mut parser, &mut ans_path_builder),
-                        // "label" =>,
-                        // "split" =>,
-                        // "augment" =>,
-                        //
-                        _ => unimplemented!(),
-                    }
-                }
-                _ => print!("test"),
-            }
-        }
-        unimplemented!()
-    }
-    */
 }
 #[derive(Clone)]
 pub enum SplitOffset {
@@ -396,4 +519,54 @@ impl SplitOffset {
         }
 
     }
+}
+struct SplitData {
+    name: String,
+    coords: Vec<(u32, u32)>,
+}
+
+impl SplitData {
+    fn new(split: Vec<&str>) -> SplitData {
+        let mut file_name = String::from(split[0]);
+        file_name.push('_');
+        file_name.push_str(split[1]);
+        file_name.push('_');
+        file_name.push_str(split[2]);
+        file_name.push_str(".tif");
+
+        SplitData {
+            name: file_name,
+            coords: vec![],
+        }
+    }
+    fn add_data(&mut self, tuple: (u32, u32)) {
+        self.coords.push(tuple);
+    }
+    fn get_name(&self) -> &str {
+        &self.name
+    }
+}
+fn create_splitmap(bufreader: BufReader<&File>) -> HashMap<String, SplitData> {
+    let mut img_map: HashMap<String, SplitData> = HashMap::new();
+
+    for line in bufreader.lines() {
+        let l = line.unwrap();
+        let split = l.split(" ").collect::<Vec<_>>();
+        let s = split[0].split("_").collect::<Vec<_>>();
+
+        let mut key = String::from(s[0]);
+        key.push_str(s[1]);
+
+        let coord_pair = (s[3].parse::<u32>().unwrap(), s[4].parse::<u32>().unwrap());
+        match img_map.entry(key) {
+            Entry::Occupied(mut o) => {
+                let temp = o.get_mut();
+                temp.add_data(coord_pair);
+            }
+            Entry::Vacant(v) => {
+                v.insert(SplitData::new(s));
+            }
+        }
+    }
+    img_map
 }

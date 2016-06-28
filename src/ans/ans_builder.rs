@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use img_reader::LabelType;
 use ans::{Ans, SplitOffset};
 use ans::return_type::{ReturnType, ImgFormat};
@@ -13,6 +13,9 @@ pub struct AnsPathBuilder {
     split_size: Option<(u32, u32)>,
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
     img_format: Option<ImgFormat>,
+    rotation: u8,
+    output_real: Option<PathBuf>,
+    output_mask: Option<PathBuf>,
 }
 
 impl AnsPathBuilder {
@@ -23,10 +26,21 @@ impl AnsPathBuilder {
             split_size: None,
             split_offset: (None, None),
             img_format: None,
+            rotation: 0,
+            output_real: None,
+            output_mask: None,
         }
     }
     pub fn set_img_dir(mut self, path: PathBuf) -> AnsPathBuilder {
         self.img_dir = Some(path);
+        self
+    }
+    pub fn set_output_real(mut self, path: &str) -> AnsPathBuilder {
+        self.output_real = Some(PathBuf::from(path));
+        self
+    }
+    pub fn set_output_mask(mut self, path: &str) -> AnsPathBuilder {
+        self.output_mask = Some(PathBuf::from(path));
         self
     }
 
@@ -36,6 +50,10 @@ impl AnsPathBuilder {
     }
     pub fn set_split_size(mut self, size: Option<(u32, u32)>) -> AnsPathBuilder {
         self.split_size = size;
+        self
+    }
+    pub fn set_rotation(mut self, rotation_cnt: u8) -> AnsPathBuilder {
+        self.rotation = rotation_cnt;
         self
     }
 
@@ -64,6 +82,9 @@ impl AnsPathBuilder {
             split_offset: self.split_offset,
             img_format: self.img_format.unwrap(),
             discard_barrier: None,
+            rotation: self.rotation,
+            output_real: self.output_real.unwrap(),
+            output_mask: self.output_mask,
         }
     }
 }
