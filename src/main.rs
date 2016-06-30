@@ -39,12 +39,12 @@ fn main() {
     let now = PreciseTime::now();
     let mut ans = AnsPathBuilder::new().set_img_dir(training_path)
                                        .set_label_type(label_type)
-                                       .set_split_size(Some((400u32, 30032)))
-                                       .set_split_offset((Some(SplitOffset::Val(400u32)), Some(SplitOffset::Val(300u32))))
+                                       .set_split_size(Some((500u32, 500u32)))
+                                       .set_split_offset((Some(SplitOffset::Val(500u32)), Some(SplitOffset::Val(500u32))))
                                        .set_img_type(ImageFormat::PNG)
                                        .set_output_real("data/28Jun/real")
                                        .set_output_mask("data/28Jun/mask")
-                                       .set_rotation(4)
+                                       .set_rotation(3)
                                        .build();
 
 
@@ -59,10 +59,10 @@ fn main() {
     println!("{:?} ms to create img_reader", duration.num_milliseconds());
 
     let now = PreciseTime::now();
-    ans.split(&mut img_reader);
+    ans.new_split(&mut img_reader);
     let finish = PreciseTime::now();
     let duration = now.to(finish);
-    println!("{:?} ms to split Healthy images", duration.num_milliseconds());
+    println!("{:?} ms to split images", duration.num_milliseconds());
     /*
     let now = PreciseTime::now();
     ans.build_healthy(&mut img_reader);

@@ -7,6 +7,7 @@ pub struct SplitImage {
     pub image: Option<RgbImage>,
     pub label: Option<Label>,
     dimension: (u32, u32),
+    rotation: u8,
     x_offset: u32,
     y_offset: u32,
 }
@@ -16,6 +17,7 @@ impl SplitImage {
                img: RgbImage,
                label: Label,
                dim: (u32, u32),
+               rot: u8,
                x: u32,
                y: u32)
                -> SplitImage {
@@ -24,6 +26,7 @@ impl SplitImage {
             image: Some(img),
             label: Some(label),
             dimension: dim,
+            rotation: rot,
             x_offset: x,
             y_offset: y,
         }
@@ -32,6 +35,7 @@ impl SplitImage {
     pub fn build(src: String,
                x_dim: u32,
                y_dim: u32,
+               rot: u8,
                x: u32,
                y: u32)
                -> SplitImage {
@@ -40,6 +44,7 @@ impl SplitImage {
             image: None,
             label: None,
             dimension: (x_dim, y_dim),
+            rotation: rot,
             x_offset: x,
             y_offset: y,
         }
@@ -75,5 +80,15 @@ impl SplitImage {
 
     pub fn set_image(&mut self, img: ImageBuffer<Rgb<u8>, Vec<u8>>) {
         self.image = Some(img);
+    }
+
+    pub fn get_rotation(&self) -> u8 {
+        self.rotation
+    }
+
+    pub fn rotate(&mut self) {
+        if self.rotation < 3 {
+            self.rotation += 1;
+        }
     }
 }
