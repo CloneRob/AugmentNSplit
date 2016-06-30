@@ -14,13 +14,13 @@ pub enum LabelType {
 
 pub struct ImgReader {
     num_of_images: usize,
-    pub img_map: HashMap<OsString, (image::RgbImage, image::RgbImage)>,
+    pub img_map: HashMap<OsString, (image::DynamicImage, image::DynamicImage)>,
 }
 
 impl ImgReader {
     pub fn new<'a, 'b: 'a>(img_path: PathBuf, label_type: LabelType) -> ImgReader {
         let training_map = image_map(img_path);
-        let label_map: HashMap<OsString, image::RgbImage> = match label_type {
+        let label_map: HashMap<OsString, image::DynamicImage> = match label_type {
             // TODO Currently this only works for labels in the form of an image, which is my current
             // use case. Support for the other fields in the LabelType will be added later
             LabelType::Img(p) => image_map(p),
@@ -57,7 +57,7 @@ impl ImgReader {
     }
 }
 
-fn image_map<'a>(img_path: PathBuf) -> HashMap<OsString, image::RgbImage> {
+fn image_map<'a>(img_path: PathBuf) -> HashMap<OsString, image::DynamicImage> {
     let dir_entries = fs::read_dir(img_path)
                           .expect("The specified path given to fn image_map() doesn't seem to \
                                    exist");
@@ -70,7 +70,7 @@ fn image_map<'a>(img_path: PathBuf) -> HashMap<OsString, image::RgbImage> {
         let img_file = image::open(dir_entry.path());
 
         if let Ok(image) = img_file {
-            path_map.insert(img_name, image.to_rgb());
+            path_map.insert(img_name, image);
         } else {
             panic!("Error in fn image_map(); Could not read Image {:?}",
                    img_name);

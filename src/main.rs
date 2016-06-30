@@ -20,12 +20,11 @@ use time::{PreciseTime, Duration};
 use img_reader::{ImgReader, LabelType};
 
 use image::*;
-use ans::{Ans, SplitOffset};
-use ans::ans_builder::AnsPathBuilder;
+use ans::{augment_split, SplitOffset};
+use ans::ans_builder::AugmentSplitBuilder;
 
 
 fn main() {
-
     //let config_path = PathBuf::from("/home/robert/Projects/rust/AugmentNSplit/test_config.xml");
 
     let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/images");
@@ -37,7 +36,7 @@ fn main() {
     let label_type = LabelType::Img(label_path);
 
     let now = PreciseTime::now();
-    let mut ans = AnsPathBuilder::new().set_img_dir(training_path)
+    let mut augment_split = AugmentSplitBuilder::new().set_img_dir(training_path)
                                        .set_label_type(label_type)
                                        .set_split_size(Some((500u32, 500u32)))
                                        .set_split_offset((Some(SplitOffset::Val(500u32)), Some(SplitOffset::Val(500u32))))
@@ -53,13 +52,13 @@ fn main() {
     println!("{:?} ns to create Ans struct", duration.num_nanoseconds());
 
     let now = PreciseTime::now();
-    let mut img_reader = ImgReader::new(ans.get_imgdir(), ans.get_label_type());
+    let mut img_reader = ImgReader::new(augment_split.get_imgdir(), augment_split.get_label_type());
     let finish = PreciseTime::now();
     let duration = now.to(finish);
     println!("{:?} ms to create img_reader", duration.num_milliseconds());
 
     let now = PreciseTime::now();
-    ans.new_split(&mut img_reader);
+    //ans.new_split(&mut img_reader);
     let finish = PreciseTime::now();
     let duration = now.to(finish);
     println!("{:?} ms to split images", duration.num_milliseconds());

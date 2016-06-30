@@ -1,20 +1,20 @@
-use image::{ImageBuffer, RgbImage, Rgb};
+use image::{DynamicImage};
 use ans::label::Label;
 
 #[derive(Clone)]
 pub struct SplitImage {
     source: String,
-    pub image: Option<RgbImage>,
+    pub image: Option<DynamicImage>,
     pub label: Option<Label>,
     dimension: (u32, u32),
-    rotation: u8,
+    pub rotation: u8,
     x_offset: u32,
     y_offset: u32,
 }
 
 impl SplitImage {
     pub fn new(src: String,
-               img: RgbImage,
+               img: DynamicImage,
                label: Label,
                dim: (u32, u32),
                rot: u8,
@@ -74,11 +74,11 @@ impl SplitImage {
         self.y_offset
     }
 
-    pub fn get_image(&self) -> &Option<RgbImage> {
+    pub fn get_image(&self) -> &Option<DynamicImage> {
         &self.image
     }
 
-    pub fn set_image(&mut self, img: ImageBuffer<Rgb<u8>, Vec<u8>>) {
+    pub fn set_image(&mut self, img: DynamicImage) {
         self.image = Some(img);
     }
 
@@ -86,9 +86,7 @@ impl SplitImage {
         self.rotation
     }
 
-    pub fn rotate(&mut self) {
-        if self.rotation < 3 {
-            self.rotation += 1;
-        }
+    pub fn set_rotation(&mut self, r: u8) {
+        self.rotation = r;
     }
 }

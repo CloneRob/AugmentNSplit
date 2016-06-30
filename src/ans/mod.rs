@@ -18,182 +18,93 @@ use xml::reader::{EventReader, XmlEvent, Error};
 use img_reader::{ImgReader, LabelType};
 use image::*;
 
-mod label;
+pub mod label;
 pub mod return_type;
-mod split_image;
+pub mod split_image;
+pub mod color_values;
+pub mod augment_split;
 pub mod ans_builder;
 
 use self::label::*;
 use self::return_type::*;
 use self::split_image::*;
 use self::ans_builder::*;
+use self::color_values::ColorValues;
 
-enum ImageType {
+enum ImageKind {
     Real,
     Mask,
 }
-
-
-pub struct Ans {
-    img_dir: PathBuf,
-    label_type: LabelType,
-
-    split_size: Option<(u32, u32)>,
-    // offset for x and y values
-    split_offset: (Option<SplitOffset>, Option<SplitOffset>),
-
-    img_format: ImgFormat,
-    // Discribes a color and a percentage (f32 beeing between 0.0 and 1.0), for discarding Images
-    // which contain more than x percent of color pixels
-    discard_barrier: Option<([u8; 3], f32)>,
-
-    rotation: u8,
-
-    output_real: PathBuf,
-    output_mask: Option<PathBuf>,
-
+#[derive(Clone)]
+pub enum SplitOffset {
+    Random,
+    Val(u32),
 }
 
-impl<'a> Ans {
-    pub fn get_imgdir(&self) -> PathBuf {
-        self.img_dir.clone()
-    }
+impl SplitOffset {
+    pub fn get_value(&self) -> u32 {
+        match *self {
+            // TODO Make this actually random!!
+            SplitOffset::Random => 32u32,
+            SplitOffset::Val(x) => x,
+        }
 
-    pub fn get_label_type(&self) -> LabelType {
-        self.label_type.clone()
     }
-    fn write_to_file(&self, split_image: &SplitImage, line_file: &mut String, image_type: ImageType) {
-        let path = self.img_dir.clone();
-        let mut image_path = path.parent().unwrap().to_path_buf();
-        match image_type {
-            ImageType::Real => image_path.push(self.output_real.clone()),
-            ImageType::Mask => {
-                if let Some(ref out) = self.output_mask {
-                    image_path.push(out.clone());
-                }
+}
+struct SplitData {
+    name: String,
+    coords: Vec<(u32, u32)>,
+}
+
+impl SplitData {
+    fn new(split: Vec<&str>) -> SplitData {
+        let mut file_name = String::from(split[0]);
+        file_name.push('_');
+        file_name.push_str(split[1]);
+        file_name.push('_');
+        file_name.push_str(split[2]);
+        file_name.push_str(".tif");
+
+        SplitData {
+            name: file_name,
+            coords: vec![],
+        }
+    }
+    fn add_data(&mut self, tuple: (u32, u32)) {
+        self.coords.push(tuple);
+    }
+    fn get_name(&self) -> &str {
+        &self.name
+    }
+}
+fn create_splitmap(bufreader: BufReader<&File>) -> HashMap<String, SplitData> {
+    let mut img_map: HashMap<String, SplitData> = HashMap::new();
+
+    for line in bufreader.lines() {
+        let l = line.unwrap();
+        let split = l.split(" ").collect::<Vec<_>>();
+        let s = split[0].split("_").collect::<Vec<_>>();
+
+        let mut key = String::from(s[0]);
+        key.push_str(s[1]);
+
+        let coord_pair = (s[3].parse::<u32>().unwrap(), s[4].parse::<u32>().unwrap());
+        match img_map.entry(key) {
+            Entry::Occupied(mut o) => {
+                let temp = o.get_mut();
+                temp.add_data(coord_pair);
+            }
+            Entry::Vacant(v) => {
+                v.insert(SplitData::new(s));
             }
         }
-        DirBuilder::new().recursive(true).create(&image_path).unwrap();
-        let name = self.create_name(&split_image);
-        image_path.push(Path::new(&name[..]));
-
-        if let Some(ref image) = split_image.image {
-            match image_type {
-                ImageType::Real => {
-                    let _ = image.save(&image_path);
-                },
-                ImageType::Mask => {
-                    let dim = self.split_size.unwrap();
-                    let mut buffer = ImageBuffer::<Luma<u8>, Vec<u8>>::new(dim.0, dim.1);
-                    for (x, y, pixel) in image.enumerate_pixels().filter(|p| p.2.data != [0, 0, 0]) {
-                        let mut pixel = pixel.to_luma();
-                        pixel.data = [1];
-                        buffer.put_pixel(x, y, pixel);
-                    };
-                    let _ = buffer.save(&image_path);
-                }
-            }
-        }
-
-        if let ImageType::Real = image_type {
-            line_file.push_str("/");
-            line_file.push_str(&name);
-            if let Some(ref label) = split_image.label {
-                match *label {
-                    Label::Sick => line_file.push_str(" 1"),
-                    Label::Healthy => line_file.push_str(" 0"),
-                }
-                line_file.push_str("\n");
-            }
-        }
     }
+    img_map
+}
 
-    fn write_line_file(&self, line_file: String) {
-        let path = self.img_dir.clone();
-        let mut file_path = path.parent().unwrap().to_path_buf();
-        file_path.push(self.output_real.clone());
 
-        DirBuilder::new().recursive(true).create(&file_path).unwrap();
 
-        //let mut file = File::create(file_path.join("image_description.txt")).unwrap();
-        let mut file = OpenOptions::new()
-                                    .write(true)
-                                    .append(true)
-                                    .create(true)
-                                    .open(file_path.join("image_description.txt"))
-                                    .unwrap();
-
-        file.write(&line_file.into_bytes()[..]);
-    }
-
-    fn create_name(&self, split_image: &SplitImage) -> String {
-        let split_name = split_image.get_name();
-        let mut name = if let Some(dot_index) = split_name.char_indices().find(|&c| c.1 == '.') {
-            let name = String::from(split_name.split_at(dot_index.0).0);
-            name
-        } else {
-            String::new()
-        };
-
-        name.push('_');
-        name.push_str(&split_image.get_x_offset().to_string());
-        name.push('_');
-        name.push_str(&split_image.get_y_offset().to_string());
-
-        let rotation = match split_image.get_rotation(){
-            0 => String::from("000deg"),
-            1 => String::from("090deg"),
-            2 => String::from("180deg"),
-            3 => String::from("270deg"),
-            _ => String::from("err"),
-        };
-        name.push('_');
-        name.push_str(&rotation);
-
-        if let Some(ref label) = split_image.label {
-            match *label {
-                Label::Sick => name.push_str("_Sick"),
-                Label::Healthy => name.push_str("_Healthy"),
-            }
-        }
-
-        if let ImgFormat::Img(format) = self.img_format {
-            use image::ImageFormat::*;
-            match format {
-                PNG => name.push_str(".png"),
-                JPEG => name.push_str(".jpg"),
-                BMP => name.push_str(".bmp"),
-                TIFF => name.push_str(".tif"),
-                _ => ()
-            }
-        }
-        name
-    }
-
-    fn to_color_groups(&self, img_crop: RgbImage) -> RgbImage {
-        let split_size = self.get_split_size();
-        let buffer_length = (split_size.0 * split_size.1)  as usize;
-
-        let mut red_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
-        let mut green_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
-        let mut blue_buffer: Vec<u8> = Vec::with_capacity(buffer_length);
-
-        let mut img_buffer: Vec<u8> = Vec::with_capacity(buffer_length * 3 + 1);
-
-        for pixel in img_crop.pixels() {
-            // pixel.data contains values for red, green and blue channel
-            // of the pixel
-            red_buffer.push(pixel.data[0]);
-            green_buffer.push(pixel.data[1]);
-            blue_buffer.push(pixel.data[2]);
-        }
-
-        img_buffer.append(&mut red_buffer);
-        img_buffer.append(&mut green_buffer);
-        img_buffer.append(&mut blue_buffer);
-
-        ImageBuffer::from_raw(split_size.0, split_size.1, img_buffer).unwrap()
-    }
+    /*
     pub fn build_mask_fromfile(&mut self, img_reader: &mut ImgReader, file_path: &Path) {
         let f = File::open(file_path).unwrap();
         let reader = BufReader::new(&f);
@@ -209,7 +120,7 @@ impl<'a> Ans {
 
                 if let Some(coord_vec) = map.get(&key) {
                     for coords in coord_vec.coords.iter() {
-                        let mask_crop = imageops::crop(&mut img_tuple.1, coords.0, coords.1, x_len, y_len);
+                        let mask_crop = img_tuple.1.crop(coords.0, coords.1, x_len, y_len);
                     }
                 }
             }
@@ -251,67 +162,8 @@ impl<'a> Ans {
             self.write_line_file(line_file)
         }
     }
-    fn random_rotation(&self, image: &mut ImageBuffer<Rgb<u8>, Vec<u8>>) {
-        let range = Range::new(1,3);
-        let mut rng = thread_rng();
-
-        let rotation = range.ind_sample(&mut rng);
-
-        let temp = imageops::rotate180(image);
-        match rotation {
-            //1 => image = imageops::rotate90(&image),
-            //2 => image = imageops::rotate180(&image),
-            //3 => image = imageops::rotate270(&image),
-            _ => {}
-        };
-
-    }
-    pub fn build_healthy(&mut self, img_reader: &mut ImgReader) {
-        let black_treshhold = 0.35;
-        let white_treshhold = 0.8;
-
-        if let Some((x_len, y_len)) = self.split_size {
-
-            let pixels = (x_len * y_len) as f32;
-
-            if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
-
-                let x_offset = SplitOffset::get_value(&x_offset);
-                let y_offset = SplitOffset::get_value(&y_offset);
-                println!("x offset: {:?}, y offset: {}", x_offset, y_offset);
-                println!("x len: {:?}, y len: {}", x_len, y_len);
-
-                let mut line_file = String::new();
-
-                for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
-                    let real_dim = img_tuple.0.dimensions();
-                    for i in (0 .. real_dim.0 - x_len + 1).step_by(x_offset) {
-                        for j in (0 .. real_dim.1 - y_len + 1).step_by(y_offset) {
-
-                            let real_crop = imageops::crop(&mut img_tuple.0, i, j, x_len, y_len).to_image();
-                            let mask_crop = imageops::crop(&mut img_tuple.1, i, j, x_len, y_len).to_image();
-
-                            let real_color_info = Ans::get_color([0, 0, 0], &real_crop);
-                            let mask_color_info = Ans::get_color([255, 255, 255], &mask_crop);
-
-                            if real_color_info.1 / pixels < black_treshhold {
-                                if mask_color_info.1 / pixels < 1.0 - white_treshhold {
-                                    let mut split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, 0, i, j);
-                                    split_image.label = Some(Label::Healthy);
-                                    split_image.image = Some(real_crop);
-
-                                    self.write_to_file(&split_image, &mut line_file, ImageType::Real)
-                                }
-                            } else {
-                                    println!("thrown out outer" );
-                            }
-                        }
-                    }
-                }
-                self.write_line_file(line_file)
-            }
-        }
-    }
+    */
+    /*
     pub fn build_split(&mut self, img_reader: &mut ImgReader) {
 
         let black_treshhold = 0.25;
@@ -356,10 +208,6 @@ impl<'a> Ans {
         }
     }
 
-    pub fn get_color(color: [u8; 3], image: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> ([u8; 3], f32){
-        let color_cnt = image.pixels().filter(|x| x.data == color).count();
-        (color, color_cnt as f32)
-    }
 
     pub fn oversample_split(&mut self) {
         let mut img_reader = ImgReader::new(self.img_dir.clone(), self.label_type.clone());
@@ -567,123 +415,5 @@ impl<'a> Ans {
         }
     }
 
-    pub fn check_color(image: &RgbImage, color: [u8; 3], percentage: f32) -> bool {
-        let dim = {
-            let (x, y) = image.dimensions();
-            (x as f32, y as f32)
-        };
-        if let Some(majority_color) = Ans::majority_color(image) {
-            if majority_color.0 == color &&
-                //percentage of color in given image
-               (majority_color.1 as f32 / (dim.0 * dim.1)) >= percentage {
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-    pub fn majority_color(image: &RgbImage) -> Option<([u8; 3], usize)> {
-        let mut color_map: HashMap<[u8; 3], usize> = HashMap::new();
-        for pixel in image.pixels() {
-            let color_cnt = color_map.entry(pixel.data).or_insert(0);
-            *color_cnt += 1;
-        }
-        let majority_color = color_map.drain().max();
-        majority_color
-    }
-    fn set_split_size(&mut self, x: u32, y: u32) {
-        self.split_size = Some((x, y));
-    }
-    fn get_split_size(&self) -> (u32, u32) {
-        if let Some((x, y)) = self.split_size {
-            (x, y)
-        } else {
-            (0, 0)
-        }
-    }
-    fn set_split_offset(&mut self, x: Option<u32>, y: Option<u32>) {
-        match (x, y) {
-            (Some(x_val), Some(y_val)) => {
-                self.split_offset = (Some(SplitOffset::Val(x_val)), Some(SplitOffset::Val(y_val)))
-            }
-            (Some(x_val), None) => {
-                self.split_offset = (Some(SplitOffset::Val(x_val)), Some(SplitOffset::Random))
-            }
-            (None, Some(y_val)) => {
-                self.split_offset = (Some(SplitOffset::Random), Some(SplitOffset::Val(y_val)))
-            }
-            (None, None) => {
-                self.split_offset = (Some(SplitOffset::Random), Some(SplitOffset::Random))
-            }
-        }
-    }
 
-}
-#[derive(Clone)]
-pub enum SplitOffset {
-    Random,
-    Val(u32),
-}
-
-impl SplitOffset {
-    pub fn get_value(&self) -> u32 {
-        match *self {
-            // TODO Make this actually random!!
-            SplitOffset::Random => 32u32,
-            SplitOffset::Val(x) => x,
-        }
-
-    }
-}
-struct SplitData {
-    name: String,
-    coords: Vec<(u32, u32)>,
-}
-
-impl SplitData {
-    fn new(split: Vec<&str>) -> SplitData {
-        let mut file_name = String::from(split[0]);
-        file_name.push('_');
-        file_name.push_str(split[1]);
-        file_name.push('_');
-        file_name.push_str(split[2]);
-        file_name.push_str(".tif");
-
-        SplitData {
-            name: file_name,
-            coords: vec![],
-        }
-    }
-    fn add_data(&mut self, tuple: (u32, u32)) {
-        self.coords.push(tuple);
-    }
-    fn get_name(&self) -> &str {
-        &self.name
-    }
-}
-fn create_splitmap(bufreader: BufReader<&File>) -> HashMap<String, SplitData> {
-    let mut img_map: HashMap<String, SplitData> = HashMap::new();
-
-    for line in bufreader.lines() {
-        let l = line.unwrap();
-        let split = l.split(" ").collect::<Vec<_>>();
-        let s = split[0].split("_").collect::<Vec<_>>();
-
-        let mut key = String::from(s[0]);
-        key.push_str(s[1]);
-
-        let coord_pair = (s[3].parse::<u32>().unwrap(), s[4].parse::<u32>().unwrap());
-        match img_map.entry(key) {
-            Entry::Occupied(mut o) => {
-                let temp = o.get_mut();
-                temp.add_data(coord_pair);
-            }
-            Entry::Vacant(v) => {
-                v.insert(SplitData::new(s));
-            }
-        }
-    }
-    img_map
-}
+*/
