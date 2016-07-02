@@ -1,9 +1,10 @@
-use image::{DynamicImage,Rgb, ImageBuffer};
+use image::DynamicImage;
 use ans::{augment_split, color_values};
 
 #[derive(Debug, Clone)]
 pub enum Label {
     Sick,
+    Fuzzy,
     Healthy,
 }
 

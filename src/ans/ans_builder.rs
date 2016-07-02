@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use img_reader::LabelType;
 use ans::{augment_split, SplitOffset};
-use ans::return_type::{ReturnType, ImgFormat};
+use ans::return_type::ImgFormat;
 
 use image;
 
@@ -13,7 +13,7 @@ pub struct AugmentSplitBuilder {
     split_size: Option<(u32, u32)>,
     split_offset: (Option<SplitOffset>, Option<SplitOffset>),
     img_format: Option<ImgFormat>,
-    rotation: u8,
+    rotation: bool,
     output_real: Option<PathBuf>,
     output_mask: Option<PathBuf>,
 }
@@ -26,7 +26,7 @@ impl AugmentSplitBuilder {
             split_size: None,
             split_offset: (None, None),
             img_format: None,
-            rotation: 0,
+            rotation: false,
             output_real: None,
             output_mask: None,
         }
@@ -52,8 +52,8 @@ impl AugmentSplitBuilder {
         self.split_size = size;
         self
     }
-    pub fn set_rotation(mut self, rotation_cnt: u8) -> AugmentSplitBuilder {
-        self.rotation = rotation_cnt;
+    pub fn with_rotation(mut self) -> AugmentSplitBuilder {
+        self.rotation = true;
         self
     }
 

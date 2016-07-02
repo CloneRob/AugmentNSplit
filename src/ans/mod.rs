@@ -1,22 +1,10 @@
 use std::fs::File;
-use std::mem;
 use std::io::prelude::*;
-use std::fs::OpenOptions;
-use std::ffi::OsString;
 use std::io::BufReader;
-use std::fs::DirBuilder;
-use std::path::Path;
-use std::path::PathBuf;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use rand::{thread_rng, sample};
-use rand::distributions::{IndependentSample, Range};
 
-use xml::reader::{EventReader, XmlEvent, Error};
-
-use img_reader::{ImgReader, LabelType};
-use image::*;
 
 pub mod label;
 pub mod return_type;
@@ -24,12 +12,6 @@ pub mod split_image;
 pub mod color_values;
 pub mod augment_split;
 pub mod ans_builder;
-
-use self::label::*;
-use self::return_type::*;
-use self::split_image::*;
-use self::ans_builder::*;
-use self::color_values::ColorValues;
 
 enum ImageKind {
     Real,

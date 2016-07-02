@@ -15,13 +15,13 @@ impl ColorValues {
         ColorValues::rgb([0,0,0])
     }
     pub fn white_rgb() -> ColorValues {
-        ColorValues::rgb([1,1,1])
+        ColorValues::rgb([255,255,255])
     }
 
     pub fn black_luma() -> ColorValues {
         ColorValues::luma([0])
     }
     pub fn white_luma() -> ColorValues {
-        ColorValues::luma([1])
+        ColorValues::luma([255])
     }
 }

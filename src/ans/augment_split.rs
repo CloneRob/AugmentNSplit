@@ -1,19 +1,17 @@
-use std::fs::File;
-use std::mem;
+//use std::fs::File;
 use std::io::prelude::*;
 use std::fs::OpenOptions;
-use std::ffi::OsString;
-use std::io::BufReader;
+//use std::ffi::OsString;
+//use std::io::BufReader;
 use std::fs::DirBuilder;
 use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
+//use std::collections::hash_map::Entry;
+use rand::*;
 
-use rand::{thread_rng, sample};
-use rand::distributions::{IndependentSample, Range};
 
-use xml::reader::{EventReader, XmlEvent, Error};
+//use xml::reader::{EventReader, XmlEvent, Error};
 
 use img_reader::{ImgReader, LabelType};
 use image::*;
@@ -21,7 +19,7 @@ use image::*;
 use ans::label::*;
 use ans::return_type::*;
 use ans::split_image::*;
-use ans::ans_builder::*;
+//use ans::ans_builder::*;
 use ans::color_values::ColorValues;
 use ans::SplitOffset;
 use ans::ImageKind;
@@ -39,7 +37,7 @@ pub struct AugmentSplit {
     // which contain more than x percent of color pixels
     discard_barrier: Option<([u8; 3], f32)>,
 
-    rotation: u8,
+    rotation: bool,
 
     output_real: PathBuf,
     output_mask: Option<PathBuf>,
@@ -53,7 +51,7 @@ impl<'a> AugmentSplit {
         split_offset: (Option<SplitOffset>, Option<SplitOffset>),
         img_format: ImgFormat,
         discard_barrier: Option<([u8; 3], f32)>,
-        rotation: u8,
+        rotation: bool,
         output_real: PathBuf,
         output_mask: Option<PathBuf>
     ) -> AugmentSplit {
@@ -78,39 +76,43 @@ impl<'a> AugmentSplit {
         self.label_type.clone()
     }
     fn write_to_file(&self, split_image: &SplitImage, line_file: &mut String) {
+        /*
         let name = self.create_name(&split_image);
-        if let Some(ref image) = split_image.image {
-            match *image {
-                DynamicImage::ImageRgb8(ref image) => {
-                    let image_path = self.create_path(&name, ImageKind::Real);
-                    let _ = image.save(&image_path);
-                    line_file.push_str("/");
-                    line_file.push_str(&name);
+        if let Some(ref image) = split_image.real {
+            if let DynamicImage::ImageRgb8(ref image) = *image {
+                let image_path = self.create_path(&name, ImageKind::Real);
+                let _ = image.save(&image_path);
 
-                    if let Some(ref label) = split_image.label {
-                        match *label {
-                            Label::Sick => line_file.push_str(" 1"),
-                            Label::Healthy => line_file.push_str(" 0"),
-                        }
-                        line_file.push_str("\n");
+                line_file.push_str("/");
+                line_file.push_str(&name);
+                line_file.push_str("\n");
+            };
+        };
+        if let Some(ref image) = split_image.mask {
+            if let DynamicImage::ImageLuma8(ref image) = *image {
+                let image_path = self.create_path(&name, ImageKind::Mask);
+
+                let dim = self.split_size.unwrap();
+                let mut buffer = ImageBuffer::<Luma<u8>, Vec<u8>>::new(dim.0, dim.1);
+
+                for (x, y, pixel) in image.enumerate_pixels().filter(|p| p.2.data != [0]) {
+                    let mut pixel = pixel.to_luma();
+                    match split_image.label {
+                        Some(Label::Sick) => {
+                            pixel.data = [255];
+                            buffer.put_pixel(x, y, pixel);
+                        },
+                        Some(Label::Fuzzy) => {
+                            pixel.data = [127];
+                            buffer.put_pixel(x, y, pixel);
+                        },
+                        _ => {}
                     }
-                },
-                DynamicImage::ImageLuma8(ref image) => {
-                    let image_path = self.create_path(&name, ImageKind::Mask);
-
-                    let dim = self.split_size.unwrap();
-                    let mut buffer = ImageBuffer::<Luma<u8>, Vec<u8>>::new(dim.0, dim.1);
-
-                    for (x, y, pixel) in image.enumerate_pixels().filter(|p| p.2.data != [0]) {
-                        let mut pixel = pixel.to_luma();
-                        pixel.data = [1];
-                        buffer.put_pixel(x, y, pixel);
-                    };
-                    let _ = buffer.save(&image_path);
-                },
-                _ => {}
+                };
+                let _ = buffer.save(&image_path);
             }
         }
+        */
     }
 
     fn write_line_file(&self, line_file: String) {
@@ -128,7 +130,7 @@ impl<'a> AugmentSplit {
                                     .open(file_path.join("image_description.txt"))
                                     .unwrap();
 
-        file.write(&line_file.into_bytes()[..]);
+        let _ = file.write(&line_file.into_bytes()[..]);
     }
 
     fn create_path(&self, name: &str, image_kind: ImageKind) -> PathBuf {
@@ -182,6 +184,7 @@ impl<'a> AugmentSplit {
             match *label {
                 Label::Sick => name.push_str("_Sick"),
                 Label::Healthy => name.push_str("_Healthy"),
+                Label::Fuzzy => name.push_str("_Fuzzy"),
             }
         }
 
@@ -197,28 +200,9 @@ impl<'a> AugmentSplit {
         }
         name
     }
-    fn random_rotation(&self, split_image: &mut SplitImage) {
-        let range = Range::new(1,3);
-        let mut rng = thread_rng();
-        let rotation = range.ind_sample(&mut rng);
-
-        let image = mem::replace(&mut split_image.image, None);
-
-        if let Some(mut image) = image {
-            match rotation {
-                1 => image = image.rotate90(),
-                2 => image = image.rotate180(),
-                3 => image = image.rotate270(),
-                _ => {}
-            };
-            split_image.set_rotation(rotation);
-            split_image.set_image(image);
-        }
-    }
-
-    pub fn build_healthy(&mut self, img_reader: &mut ImgReader) {
-        let black_treshhold = 0.35;
-        let white_treshhold = 0.8;
+    pub fn split_naive(&mut self, img_reader: &mut ImgReader) {
+        //let black_treshhold = 0.35;
+        //let white_treshhold = 0.8;
 
         if let Some((x_len, y_len)) = self.split_size {
 
@@ -239,23 +223,31 @@ impl<'a> AugmentSplit {
                             let mask_crop = img_tuple.1.crop(i, j, x_len, y_len);
 
                             if let Ok(real_info) = AugmentSplit::get_color(ColorValues::black_rgb(), &real_crop) {
-
-                                if real_info.1 / pixels < black_treshhold {
+                                //Black threshold 0.35
+                                if real_info.1 / pixels < 0.20 {
 
                                     if let Ok(mask_info) = AugmentSplit::get_color(ColorValues::white_luma(), &mask_crop){
-                                        if mask_info.1 / pixels < 1.0 - white_treshhold {
-                                            let mut split_image = SplitImage::build(String::from(name.to_str().unwrap()), x_len, y_len, 0, i, j);
-                                            split_image.label = Some(Label::Healthy);
-                                            split_image.image = Some(real_crop);
-
-                                            self.write_to_file(&split_image, &mut line_file)
+                                        //White Threshold 0.2
+                                        let white_ratio = mask_info.1 / pixels;
+                                        let mut split = SplitImage::new(name,
+                                                                    real_crop,
+                                                                    mask_crop,
+                                                                    Label::Healthy,
+                                                                    (x_len,y_len),
+                                                                    0,i,j);
+                                        match white_ratio {
+                                            0.2 ... 0.5 => split.label = Some(Label::Fuzzy),
+                                            0.5 ... 1.0  => split.label = Some(Label::Sick),
+                                            _ => {},
                                         }
-                                    } else {
-
+                                        self.write_to_file(&split, &mut line_file);
+                                        if self.rotation{
+                                            if let Some(rotated) = split.random_rotation() {
+                                                self.write_to_file(&rotated, &mut line_file);
+                                            }
+                                        }
                                     }
                                 }
-                            } else {
-
                             }
                         }
                     }
@@ -263,6 +255,148 @@ impl<'a> AugmentSplit {
                 self.write_line_file(line_file)
             }
         }
+    }
+
+    pub fn build_healthy(&mut self, img_reader: &mut ImgReader) -> (u32, u32){
+        //let black_treshhold = 0.35;
+        //let white_treshhold = 0.8;
+        let mut healthy = 0;
+        let mut fuzzy = 0;
+
+        if let Some((x_len, y_len)) = self.split_size {
+
+            let pixels = (x_len * y_len) as f32;
+
+            if let (Some(x_offset), Some(y_offset)) = self.split_offset.clone() {
+                let x_offset = SplitOffset::get_value(&x_offset);
+                let y_offset = SplitOffset::get_value(&y_offset);
+                let mut line_file = String::new();
+
+                for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
+                    let real_dim = img_tuple.0.dimensions();
+
+                    for i in (0 .. real_dim.0 - x_len + 1).step_by(x_offset) {
+
+                        for j in (0 .. real_dim.1 - y_len + 1).step_by(y_offset) {
+                            let real_crop = img_tuple.0.crop(i, j, x_len, y_len);
+                            let mask_crop = img_tuple.1.crop(i, j, x_len, y_len);
+
+                            if let Ok(real_info) = AugmentSplit::get_color(ColorValues::black_rgb(), &real_crop) {
+                                //Black threshold 0.35
+                                if real_info.1 / pixels < 0.20 {
+
+                                    if let Ok(mask_info) = AugmentSplit::get_color(ColorValues::white_luma(), &mask_crop){
+                                        let mut split = SplitImage::new(name,
+                                                                    real_crop,
+                                                                    mask_crop,
+                                                                    Label::Healthy,
+                                                                    (x_len,y_len),
+                                                                    0,i,j);
+                                        let white_ratio = mask_info.1 / pixels;
+                                        match white_ratio {
+                                            0.0 ... 0.2 => {
+                                                self.write_to_file(&split, &mut line_file);
+                                                healthy += 1;
+                                                if self.rotation{
+                                                    if let Some(rotated) = split.random_rotation() {
+                                                        self.write_to_file(&rotated, &mut line_file);
+                                                        healthy += 1;
+                                                    }
+                                                }
+                                            },
+                                            0.2 ... 0.5 => {
+                                                split.label = Some(Label::Fuzzy);
+                                                self.write_to_file(&split, &mut line_file);
+                                                fuzzy += 1;
+                                                if self.rotation{
+                                                    if let Some(rotated) = split.random_rotation() {
+                                                        self.write_to_file(&rotated, &mut line_file);
+                                                        fuzzy += 1;
+                                                    }
+                                                }
+                                            },
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                self.write_line_file(line_file)
+            }
+        }
+        (healthy, fuzzy)
+    }
+    pub fn build_sick(&mut self, img_reader: &mut ImgReader) -> (u32, u32){
+        let seed = &[1, 2, 3, 4];
+        let mut fuzzy = 0;
+        let mut sick = 0;
+        if let Some((x_len, y_len)) = self.split_size {
+
+            let pixels = (x_len * y_len) as f32;
+            let mut line_file = String::new();
+
+            for (name, mut img_tuple) in img_reader.img_map.iter_mut() {
+                if let DynamicImage::ImageLuma8(ref mask) = img_tuple.1.clone() {
+                    let sick_pixel_vec = mask.enumerate_pixels()
+                                                   .filter(|x| x.2.data == [255])
+                                                   .map(|x| (x.0, x.1))
+                                                   .collect::<Vec<_>>();
+
+                    let sample_size = (0.00045 * sick_pixel_vec.len() as f32) as usize;
+                    let mut rng = StdRng::new().unwrap();
+                    rng.reseed(seed);
+                    let sampled_pixels = sample(&mut rng, sick_pixel_vec, sample_size);
+
+                    for s in sampled_pixels {
+                        let real_crop = img_tuple.0.crop(s.0, s.1, x_len, y_len);
+                        let mask_crop = img_tuple.1.crop(s.0, s.1, x_len, y_len);
+
+                        if real_crop.dimensions() == (x_len, y_len) {
+                            if let Ok(mask_info) = AugmentSplit::get_color(ColorValues::white_luma(), &mask_crop){
+                                //White Threshold 0.25
+                                let mut split = SplitImage::new(name,
+                                                            real_crop,
+                                                            mask_crop,
+                                                            Label::Fuzzy,
+                                                            (x_len,y_len),
+                                                            0,s.0,s.1);
+                                let white_ratio = mask_info.1 / pixels;
+                                match white_ratio {
+                                    0.2 ... 0.5 => {
+                                        self.write_to_file(&split, &mut line_file);
+                                        fuzzy += 1;
+                                        if self.rotation{
+                                            if let Some(rotated) = split.random_rotation() {
+                                                self.write_to_file(&rotated, &mut line_file);
+                                                fuzzy += 1;
+                                            }
+                                        }
+                                    },
+                                    0.5 ... 1.0  => {
+                                        split.label = Some(Label::Sick);
+                                        self.write_to_file(&split, &mut line_file);
+                                        sick += 1;
+                                        if self.rotation{
+                                            if let Some(rotated) = split.random_rotation() {
+                                                self.write_to_file(&rotated, &mut line_file);
+                                                sick += 1;
+                                            }
+                                        }
+                                    },
+                                    _ => {},
+                                }
+                            } else {
+
+                            }
+                        }
+                    }
+                }
+            }
+            self.write_line_file(line_file)
+        }
+        (fuzzy, sick)
     }
     pub fn get_color(color: ColorValues, image: &DynamicImage) -> Result<(ColorValues, f32), &str>{
         match *image {
