@@ -19,16 +19,64 @@ use img_reader::{ImgReader, LabelType};
 use image::*;
 use ans::SplitOffset;
 use ans::ans_builder::AugmentSplitBuilder;
+use ans::augment_split::FindLabel;
+use ans::label::Label;
+use ans::color_values;
+
+struct Split {
+    ratio: Option<f32>,
+}
+
+impl FindLabel for Split {
+    fn label(&mut self, ratio: f32) -> Option<Label> {
+        self.ratio = Some(ratio);
+        self.label_fn()
+    }
+    fn label_fn(&self) -> Option<Label> {
+        if let Some(ratio) = self.ratio {
+            match ratio {
+                0.0 ... 0.2 => Some(Label::Healthy),
+                0.8 ... 1.0 => Some(Label::Sick),
+                _ => {None},
+            }
+        } else {
+            None
+        }
+    }
+}
+
+struct Oversample {
+    ratio: Option<f32>,
+}
+
+
+impl FindLabel for Oversample {
+    fn label(&mut self, ratio: f32) -> Option<Label> {
+        self.ratio = Some(ratio);
+        self.label_fn()
+    }
+    fn label_fn(&self) -> Option<Label> {
+        if let Some(ratio) = self.ratio {
+            match ratio {
+                0.0 ... 0.2 => Some(Label::Healthy),
+                0.8 ... 1.0 => Some(Label::Sick),
+                _ => {None},
+            }
+        } else {
+            None
+        }
+    }
+}
 
 
 fn main() {
     //let config_path = PathBuf::from("/home/robert/Projects/rust/AugmentNSplit/test_config.xml");
 
-    let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/images");
-    let label_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/mask_and");
+    //let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/images");
+    //let label_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/mask_and");
 
-    //let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/subset");
-    //let label_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/subset_mask");
+    let training_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/subset");
+    let label_path = PathBuf::from("/media/robert/Lokaler Datenträger/BachelorArbeit/Bilder/subset_mask");
 
     let label_type = LabelType::Img(label_path);
 
@@ -39,8 +87,8 @@ fn main() {
                                        .set_split_offset((Some(SplitOffset::Val(190u32)), Some(SplitOffset::Val(190u32))))
                                        .set_img_type(ImageFormat::PNG)
                                        .with_rotation()
-                                       .set_output_real("data/2Jul/full/real")
-                                       .set_output_mask("data/2Jul/full/mask")
+                                       .set_output_real("data/3Jul/train/real")
+                                       .set_output_mask("data/3Jul/train/mask")
                                        .build();
 
 
@@ -54,13 +102,17 @@ fn main() {
     let duration = now.to(finish);
     println!("{:?} ms to create img_reader", duration.num_milliseconds());
 
+
+
     let now = PreciseTime::now();
-    let hf = augment_split.build_healthy(&mut img_reader);
-    let fs = augment_split.build_sick(&mut img_reader);
+    let mut s = Split{ratio: None};
+    augment_split.split(&mut img_reader, &mut s);
+
+    let mut os = Oversample{ratio: None};
+    augment_split.oversample(&mut img_reader, 0.0004, color_values::ColorValues::white_luma(), &mut os);
     let finish = PreciseTime::now();
     let duration = now.to(finish);
     println!("{:?} ms to split images", duration.num_milliseconds());
-    println!("#{}: Healthy, #{}: Fuzzy, #{}: Sick", hf.0, hf.1 + fs.0, fs.1);
 
     /*
     let now = PreciseTime::now();

@@ -1,6 +1,7 @@
 use image::{DynamicImage};
 use ans::label::Label;
 use std::mem;
+use rand::*;
 
 #[derive(Clone)]
 pub struct SplitImage {
@@ -101,18 +102,9 @@ impl SplitImage {
         self.rotation = r;
     }
 
-    pub fn random_rotation(mut self) -> Option<SplitImage> {
-        use rand::*;
-
-        let seed = &[1, 2, 3, 4];
-        let mut rng = StdRng::new().unwrap();
-        rng.reseed(seed);
-
-        let mut xrng = XorShiftRng::new_unseeded();
-        xrng.reseed([1,2,3,4]);
-
+    pub fn random_rotation(mut self, rng: &mut StdRng) -> Option<SplitImage> {
         if rng.gen_range(0, 100) < 40 {
-            self.rotation = xrng.gen_range(0, 4);
+            self.rotation = rng.gen_range(0, 4);
 
             if  self.rotation != 0 {
                 let real = mem::replace(&mut self.real, None);
