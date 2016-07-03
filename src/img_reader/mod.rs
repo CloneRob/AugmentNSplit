@@ -30,12 +30,11 @@ impl ImgReader {
             for (name, training_img) in training_map {
                 match label_map.get(&name) {
                     Some(label_img) => {
-                        //println!("Inserting {:?} into image map", name);
+                        // println!("Inserting {:?} into image map", name);
                         img_map.insert(name, (training_img, label_img.clone()));
                     }
                     None => {
-                            panic!("Could not find a corresponding Label for Image {}",
-                                   name);
+                        panic!("Could not find a corresponding Label for Image {}", name);
                     }
                 }
             }
@@ -55,8 +54,7 @@ impl ImgReader {
 
 fn image_map<'a>(img_path: PathBuf) -> HashMap<String, image::DynamicImage> {
     let dir_entries = fs::read_dir(img_path)
-                          .expect("The specified path given to fn image_map() doesn't seem to \
-                                   exist");
+        .expect("The specified path given to fn image_map() doesn't seem to exist");
     let mut path_map = HashMap::new();
 
     for d in dir_entries {

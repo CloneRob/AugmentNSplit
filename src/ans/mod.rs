@@ -4,8 +4,6 @@ use std::io::BufReader;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-
-
 pub mod label;
 pub mod return_type;
 pub mod split_image;

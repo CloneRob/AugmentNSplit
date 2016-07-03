@@ -20,6 +20,8 @@ pub enum ImgLayout {
 }
 
 pub enum ImgFormat {
-    Binary{batch_size: usize},
+    Binary {
+        batch_size: usize,
+    },
     Img(ImageFormat),
 }

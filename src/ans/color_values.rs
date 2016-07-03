@@ -23,10 +23,10 @@ impl ColorValues {
         ColorValues::LUMA(color)
     }
     pub fn black_rgb() -> ColorValues {
-        ColorValues::rgb([0,0,0])
+        ColorValues::rgb([0, 0, 0])
     }
     pub fn white_rgb() -> ColorValues {
-        ColorValues::rgb([255,255,255])
+        ColorValues::rgb([255, 255, 255])
     }
 
     pub fn black_luma() -> ColorValues {

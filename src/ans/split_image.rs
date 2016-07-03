@@ -1,4 +1,4 @@
-use image::{DynamicImage};
+use image::DynamicImage;
 use ans::label::Label;
 use std::mem;
 use rand::*;
@@ -37,13 +37,7 @@ impl SplitImage {
         }
     }
 
-    pub fn build(src: &String,
-               x_dim: u32,
-               y_dim: u32,
-               rot: u8,
-               x: u32,
-               y: u32)
-               -> SplitImage {
+    pub fn build(src: &String, x_dim: u32, y_dim: u32, rot: u8, x: u32, y: u32) -> SplitImage {
         SplitImage {
             source: src.clone(),
             real: None,
@@ -57,7 +51,10 @@ impl SplitImage {
     }
 
     pub fn print(&self) {
-        println!("{}\nx: {}, y: {}\n", self.source, self.x_offset, self.y_offset);
+        println!("{}\nx: {}, y: {}\n",
+                 self.source,
+                 self.x_offset,
+                 self.y_offset);
     }
 
     pub fn get_name(&self) -> &str {
@@ -106,7 +103,7 @@ impl SplitImage {
         if rng.gen_range(0, 100) < 40 {
             self.rotation = rng.gen_range(0, 4);
 
-            if  self.rotation != 0 {
+            if self.rotation != 0 {
                 let real = mem::replace(&mut self.real, None);
                 let mask = mem::replace(&mut self.mask, None);
 
@@ -115,15 +112,15 @@ impl SplitImage {
                         1 => {
                             real_ = real_.rotate90();
                             mask_ = mask_.rotate90();
-                        },
+                        }
                         2 => {
                             real_ = real_.rotate180();
                             mask_ = mask_.rotate180();
-                        },
+                        }
                         3 => {
                             real_ = real_.rotate270();
                             mask_ = mask_.rotate270();
-                        },
+                        }
                         _ => {}
                     };
                     self.set_real(real_);

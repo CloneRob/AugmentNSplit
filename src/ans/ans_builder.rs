@@ -74,17 +74,18 @@ impl AugmentSplitBuilder {
     }
 
     pub fn build(self) -> augment_split::AugmentSplit {
-        augment_split::AugmentSplit::build(
-            self.img_dir.expect("Called AugmentSplitBuilder.build() without setting img_dir"),
-            self.label_type
-                  .expect("Called AugmentSplitBuilder.build() without setting label_type"),
-            self.split_size,
-            self.split_offset,
-            self.img_format.unwrap(),
-            None,
-            self.rotation,
-            self.output_real.unwrap(),
-            self.output_mask
-        )
+        augment_split::AugmentSplit::build(self.img_dir
+                                               .expect("Called AugmentSplitBuilder.build() \
+                                                        without setting img_dir"),
+                                           self.label_type
+                                               .expect("Called AugmentSplitBuilder.build() \
+                                                        without setting label_type"),
+                                           self.split_size,
+                                           self.split_offset,
+                                           self.img_format.unwrap(),
+                                           None,
+                                           self.rotation,
+                                           self.output_real.unwrap(),
+                                           self.output_mask)
     }
 }
