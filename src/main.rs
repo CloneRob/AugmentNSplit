@@ -109,13 +109,12 @@ fn main() {
 
     let now = PreciseTime::now();
     let mut s = Split { ratio: None };
-    augment_split.split(&mut img_reader, &mut s);
+    let cv = color_values::ColorValues::white_luma();
+
+    augment_split.split(&mut img_reader, cv, &mut s);
 
     let mut os = Oversample { ratio: None };
-    augment_split.oversample(&mut img_reader,
-                             0.0004,
-                             color_values::ColorValues::white_luma(),
-                             &mut os);
+    augment_split.oversample(&mut img_reader, 0.0004, cv, &mut os);
     let finish = PreciseTime::now();
     let duration = now.to(finish);
     println!("{:?} ms to split images", duration.num_milliseconds());

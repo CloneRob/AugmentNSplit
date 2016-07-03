@@ -218,7 +218,10 @@ impl<'a> AugmentSplit {
         name
     }
 
-    pub fn split<T: FindLabel>(&mut self, img_reader: &mut ImgReader, label_fn: &mut T) {
+    pub fn split<T: FindLabel>(&mut self,
+                               img_reader: &mut ImgReader,
+                               cv: ColorValues,
+                               label_fn: &mut T) {
         let mut rng = StdRng::new().unwrap();
         rng.reseed(&[1, 7, 7, 6]);
 
@@ -244,11 +247,9 @@ impl<'a> AugmentSplit {
                                    AugmentSplit::get_color(ColorValues::black_rgb(), &real_crop) {
                                 // Black threshold 0.35
                                 if real_info.1 / pixels < 0.20 {
-                                    if let Ok(mask_info) =
-                                           AugmentSplit::get_color(ColorValues::white_luma(),
-                                                                   &mask_crop) {
-                                        let white_ratio = mask_info.1 / pixels;
-                                        let l = label_fn.label(white_ratio);
+                                    if let Ok(mask_info) = AugmentSplit::get_color(cv, &mask_crop) {
+                                        let ratio = mask_info.1 / pixels;
+                                        let l = label_fn.label(ratio);
                                         if let Some(label) = l {
                                             let split = SplitImage::new(name,
                                                                         real_crop,
@@ -299,11 +300,10 @@ impl<'a> AugmentSplit {
                         let mask_crop = img_tuple.1.crop(s.0, s.1, x_len, y_len);
 
                         if real_crop.dimensions() == (x_len, y_len) {
-                            if let Ok(mask_info) =
-                                   AugmentSplit::get_color(ColorValues::white_luma(), &mask_crop) {
+                            if let Ok(mask_info) = AugmentSplit::get_color(cv.clone(), &mask_crop) {
                                 // White Threshold 0.25
-                                let white_ratio = mask_info.1 / pixels;
-                                let l = label_fn.label(white_ratio);
+                                let ratio = mask_info.1 / pixels;
+                                let l = label_fn.label(ratio);
                                 if let Some(label) = l {
                                     let split = SplitImage::new(name,
                                                                 real_crop,

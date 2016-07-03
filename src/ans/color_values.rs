@@ -1,5 +1,5 @@
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum ColorValues {
     RGB([u8; 3]),
     LUMA([u8; 1]),
