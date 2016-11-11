@@ -18,7 +18,7 @@ pub struct ImgReader {
 impl ImgReader {
     pub fn new<'a, 'b: 'a>(img_path: PathBuf, label_type: LabelType) -> ImgReader {
         let training_map = image_map(img_path);
-        let label_map: HashMap<String, image::DynamicImage> = match label_type {
+        let mut label_map: HashMap<String, image::DynamicImage> = match label_type {
             // TODO Currently this only works for labels in the form of an image, which is my current
             // use case. Support for the other fields in the LabelType will be added later
             LabelType::Img(p) => image_map(p),
@@ -28,7 +28,7 @@ impl ImgReader {
         let img_map = {
             let mut img_map = HashMap::new();
             for (name, training_img) in training_map {
-                match label_map.get(&name) {
+                match label_map.remove(&name) {
                     Some(label_img) => {
                         // println!("Inserting {:?} into image map", name);
                         img_map.insert(name, (training_img, label_img.clone()));

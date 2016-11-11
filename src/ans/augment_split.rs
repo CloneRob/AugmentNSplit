@@ -298,6 +298,7 @@ impl<'a> AugmentSplit {
                     for s in sampled_pixels {
                         let real_crop = img_tuple.0.crop(s.0, s.1, x_len, y_len);
                         let mask_crop = img_tuple.1.crop(s.0, s.1, x_len, y_len);
+                        let t:f32 = real_crop;
 
                         if real_crop.dimensions() == (x_len, y_len) {
                             if let Ok(mask_info) = AugmentSplit::get_color(cv.clone(), &mask_crop) {

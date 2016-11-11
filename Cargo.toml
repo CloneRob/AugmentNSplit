@@ -1,5 +1,5 @@
 [package]
-name = "AugmentNSplit"
+name = "augment_split"
 version = "0.1.0"
 authors = ["CloneRob <ropamen@gmail.com>"]
 

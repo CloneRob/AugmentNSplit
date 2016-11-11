@@ -18,8 +18,46 @@ use image::*;
 use ans::SplitOffset;
 use ans::ans_builder::AugmentSplitBuilder;
 use ans::augment_split::FindLabel;
+use ans::color_values::ColorValues;
 use ans::label::Label;
 use ans::color_values;
+
+static SEED:[usize; 4] = [1, 3, 3, 7];
+
+
+fn main() {
+    let train_path = PathBuf::from("/media/data/Projects/barrett/Bilder/images");
+    let label_path = PathBuf::from("/media/data/Projects/barrett/Bilder/mask_and");
+
+    let label_type = LabelType::Img(label_path);
+
+    let mut augment_split = AugmentSplitBuilder::new()
+        .set_img_dir(train_path)
+        .set_label_type(label_type)
+        .set_split_size(Some((224u32, 224u32)))
+        .set_split_offset((Some(SplitOffset::Val(190u32)), Some(SplitOffset::Val(190u32))))
+        .set_img_type(ImageFormat::PNG)
+        .with_rotation()
+        .set_output_real("data/3Jul/train/real")
+        .set_output_mask("data/3Jul/train/mask")
+        .build();
+
+
+    let mut img_reader = ImgReader::new(augment_split.get_imgdir(), augment_split.get_label_type());
+    let cv = color_values::ColorValues::white_luma();
+
+    /*
+
+
+    let mut s = Split { ratio: None };
+
+    augment_split.split(&mut img_reader, cv, &mut s);
+
+    let mut os = Oversample { ratio: None };
+    augment_split.oversample(&mut img_reader, 0.0004, cv, &mut os);
+    */
+}
+
 
 struct Split {
     ratio: Option<f32>,
@@ -66,49 +104,45 @@ impl FindLabel for Oversample {
     }
 }
 
+struct Oversamp<'rng> {
+    curr_position: (u32, u32),
+    real: image::DynamicImage,
+    mask: image::DynamicImage,
+    rng: &'rng rand::ThreadRng,
+    candidates: Option<Vec<(u32, u32)>>,
+    color_val: ColorValues,
 
-fn main() {
-    let training_path = PathBuf::from("/media/robert/Lokaler \
-                                       Datenträger/BachelorArbeit/Bilder/subset");
-    let label_path = PathBuf::from("/media/robert/Lokaler \
-                                    Datenträger/BachelorArbeit/Bilder/subset_mask");
-
-    let label_type = LabelType::Img(label_path);
-
-    //let now = PreciseTime::now();
-    let mut augment_split = AugmentSplitBuilder::new()
-        .set_img_dir(training_path)
-        .set_label_type(label_type)
-        .set_split_size(Some((224u32, 224u32)))
-        .set_split_offset((Some(SplitOffset::Val(190u32)), Some(SplitOffset::Val(190u32))))
-        .set_img_type(ImageFormat::PNG)
-        .with_rotation()
-        .set_output_real("data/3Jul/train/real")
-        .set_output_mask("data/3Jul/train/mask")
-        .build();
-
-
-    //let finish = PreciseTime::now();
-   // let duration = now.to(finish);
-    //println!("{:?} ns to create Ans struct", duration.num_nanoseconds());
-
-    //let now = PreciseTime::now();
-    let mut img_reader = ImgReader::new(augment_split.get_imgdir(), augment_split.get_label_type());
-    //let finish = PreciseTime::now();
-    //let duration = now.to(finish);
-    //println!("{:?} ms to create img_reader", duration.num_milliseconds());
-
-
-
-    //let now = PreciseTime::now();
-    let mut s = Split { ratio: None };
-    let cv = color_values::ColorValues::white_luma();
-
-    augment_split.split(&mut img_reader, cv, &mut s);
-
-    let mut os = Oversample { ratio: None };
-    augment_split.oversample(&mut img_reader, 0.0004, cv, &mut os);
-    //let finish = PreciseTime::now();
-    //let duration = now.to(finish);
-    //println!("{:?} ms to split images", duration.num_milliseconds());
 }
+
+impl<'rng> Oversamp<'rng> { 
+    fn new(real: image::DynamicImage, mask: image::DynamicImage,
+           rng: &'rng rand::ThreadRng, cv: ColorValues) -> Oversamp {
+        let os = Oversamp {
+            curr_position: (0, 0),
+            real: real,
+            mask: mask,
+            rng: rng,
+            candidates: None,
+            color_val: cv,
+        };
+        os.extract_pixel()
+         
+    }
+
+    fn extract_pixel(mut self) -> Oversamp<'rng> {
+        let candidates = if let DynamicImage::ImageLuma8(ref mask) = self.mask {
+            let whitepx = mask.enumerate_pixels()
+                .filter(|x| self.color_val.compare(x.2.data))
+                .map(|x| (x.0, x.1))
+                .collect::<Vec<_>>();
+            Some(whitepx)
+        } else {
+            None
+        };
+        self.candidates = candidates;
+        self
+    } 
+}
+
+
+
