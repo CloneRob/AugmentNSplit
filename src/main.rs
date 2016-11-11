@@ -21,6 +21,7 @@ use ans::augment_split::FindLabel;
 use ans::color_values::ColorValues;
 use ans::label::Label;
 use ans::color_values;
+use std::option::IntoIter;
 
 static SEED:[usize; 4] = [1, 3, 3, 7];
 
@@ -45,6 +46,14 @@ fn main() {
 
     let mut img_reader = ImgReader::new(augment_split.get_imgdir(), augment_split.get_label_type());
     let cv = color_values::ColorValues::white_luma();
+
+    let rng = rand::thread_rng();
+    let img_tuple = img_reader.img_map.get("pat24_im1_ACHD");
+
+    if let Some(entry) = img_tuple {
+        //let os = Oversamp::new(&entry.0, &entry.1, &rng, cv);
+
+    }
 
     /*
 
@@ -116,7 +125,7 @@ struct Oversamp<'rng> {
 
 impl<'rng> Oversamp<'rng> { 
     fn new(real: image::DynamicImage, mask: image::DynamicImage,
-           rng: &'rng rand::ThreadRng, cv: ColorValues) -> Oversamp {
+           rng: &'rng rand::ThreadRng, cv: ColorValues) -> Oversamp<'rng> {
         let os = Oversamp {
             curr_position: (0, 0),
             real: real,
@@ -126,6 +135,7 @@ impl<'rng> Oversamp<'rng> {
             color_val: cv,
         };
         os.extract_pixel()
+
          
     }
 
@@ -142,6 +152,11 @@ impl<'rng> Oversamp<'rng> {
         self.candidates = candidates;
         self
     } 
+
+    fn next(self) -> IntoIter<Vec<(u32, u32)>> {
+        self.candidates.into_iter()
+
+    }
 }
 
 

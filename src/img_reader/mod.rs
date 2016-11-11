@@ -10,6 +10,12 @@ pub enum LabelType {
     CSV(PathBuf),
 }
 
+pub struct ImgReaderGeneric<D, L> {
+    num_of_images: usize,
+    pub img_map: HashMap<String, (D, L)>,
+}
+
+
 pub struct ImgReader {
     num_of_images: usize,
     pub img_map: HashMap<String, (image::DynamicImage, image::DynamicImage)>,
