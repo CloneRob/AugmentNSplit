@@ -10,9 +10,42 @@ pub enum LabelType {
     CSV(PathBuf),
 }
 
-pub struct ImgReaderGeneric<D, L> {
+pub trait DataTrait {
+    type Img;
+    fn do_data(&self);
+    fn read(path: PathBuf) -> image::DynamicImage;
+}
+
+pub trait LabelTrait {
+    fn do_label(&self);
+    fn get_labeltype(&self) -> LabelType;
+}
+
+pub struct ImgReaderGeneric<D, L> 
+    where D: DataTrait, L: LabelTrait {
     num_of_images: usize,
     pub img_map: HashMap<String, (D, L)>,
+}
+
+impl<D, L> ImgReaderGeneric<D, L>
+    where D:DataTrait, L: LabelTrait {
+
+    fn image_map<T>(img_path: PathBuf) -> HashMap<String, image::DynamicImage> {
+        let dir_entries = fs::read_dir(img_path)
+            .expect("The specified path given to fn image_map() doesn't seem to exist");
+        let mut path_map = HashMap::new();
+
+        for d in dir_entries {
+            let dir_entry = d.unwrap();
+
+            let img_name = dir_entry.file_name().into_string().unwrap();
+            let img_file = D::read(dir_entry.path());
+            path_map.insert(img_name, img_file);
+        }
+        path_map
+    }
+
+
 }
 
 
