@@ -27,8 +27,8 @@ static SEED:[usize; 4] = [1, 3, 3, 7];
 
 
 fn main() {
-    let train_path = PathBuf::from("/media/rcbe-titan/Daten/Projects/barrett/Bilder/subset");
-    let label_path = PathBuf::from("/media/rcbe-titan/Daten/Projects/barrett/Bilder/subset_mask");
+    let train_path = PathBuf::from("/media/rcbe-titan/Daten/Projects/barrett/Bilder/images");
+    let label_path = PathBuf::from("/media/rcbe-titan/Daten/Projects/barrett/Bilder/mask_and");
 
     let label_type = LabelType::Img(label_path);
 
@@ -36,7 +36,7 @@ fn main() {
         .set_img_dir(train_path)
         .set_label_type(label_type)
         .set_split_size(Some((50u32, 50u32)))
-        .set_split_offset((Some(SplitOffset::Val(35u32)), Some(SplitOffset::Val(35u32))))
+        .set_split_offset((Some(SplitOffset::Val(42u32)), Some(SplitOffset::Val(42u32))))
         .set_img_type(ImageFormat::PNG)
         .with_rotation()
         .set_output_real("data/train/real")
@@ -59,12 +59,12 @@ fn main() {
 
     */
 
-    let mut s = Split { ratio: None };
-    augment_split.split(&mut img_reader, cv, &mut s);
-    println!("Barrett constructed");
+    //let mut s = Split { ratio: None };
+    //augment_split.split(&mut img_reader, cv, &mut s);
+    //println!("Barrett constructed");
     let mut os = Oversample { ratio: None };
-    augment_split.oversample(&mut img_reader, 0.0004, cv, &mut os);
-    println!("Cancer constructed");
+    augment_split.oversample(&mut img_reader, 0.4, cv, &mut os);
+    //println!("Cancer constructed");
 }
 
 

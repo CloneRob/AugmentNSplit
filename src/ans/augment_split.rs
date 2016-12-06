@@ -305,15 +305,17 @@ impl<'a> AugmentSplit {
                                 let ratio = mask_info.1 / pixels;
                                 let l = label_fn.label(ratio);
                                 if let Some(label) = l {
-                                    let split = SplitImage::new(name,
-                                                                real_crop,
-                                                                mask_crop,
-                                                                label,
-                                                                (x_len, y_len),
-                                                                0,
-                                                                s.0,
-                                                                s.1);
-                                    let _ = self.save(split, &mut line_file, 0, &mut rng);
+                                    if let Label::Sick = label {
+                                        let split = SplitImage::new(name,
+                                                                    real_crop,
+                                                                    mask_crop,
+                                                                    label,
+                                                                    (x_len, y_len),
+                                                                    0,
+                                                                    s.0,
+                                                                    s.1);
+                                        let _ = self.save(split, &mut line_file, 0, &mut rng);
+                                    }
                                 }
                             }
                         }
